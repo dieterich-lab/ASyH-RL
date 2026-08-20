@@ -9,11 +9,14 @@ import pandas as pd
 import numpy as np
 from rl_optimizer import RLOptimizer
 from sklearn.compose import ColumnTransformer
+from models import GaussianCopulaModel
+from data import Data
 
 
 def main():
+    MODEL = GaussianCopulaModel
     print("=" * 80)
-    print("GMM Hyperparameter Optimization (RL-driven with Val Set)")
+    print(f"{MODEL.__qualname__} Hyperparameter Optimization (RL-driven with Val Set)")
     print("=" * 80)
     
     # 1. 路径配置
@@ -36,16 +39,24 @@ def main():
 
     discrete_columns = list([col for col in df.columns if col not in cont_columns])
     # import ipdb; ipdb.set_trace()
+
+    train_data = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
+    val_data = pd.read_csv(val_data_path, sep=',', on_bad_lines='skip')
+    train_data = Data(train_data)
+    val_data = Data(val_data)
+
+    modelParamSpace = {'default_distribution':['norm', 'beta']}
     
     optimizer = RLOptimizer(
-        train_path=train_data_path, 
-        val_path=val_data_path, # 这里的参数名必须叫 val_path
-        discrete_columns=discrete_columns
+        train_data = train_data, 
+        val_data = val_data, # 这里的参数名必须叫 val_path
+        discrete_columns=discrete_columns,
+        modelParamSpace=modelParamSpace
     )
     
     # 3. 执行优化
     print("\n[CLEO-RL] 优化中...")
-    optimizer.optimize(episodes=30)
+    optimizer.optimize(episodes=30, modelClass=MODEL)
     
     # 4. 生成最终数据
     best_params = optimizer.get_best_params()
@@ -54,6 +65,7 @@ def main():
     output_csv = 'synthetic_data_gmm_optimized_fixed.csv'
     optimizer.generate_with_best_params(output_csv, n_samples=6900)
     print(f"✓ 合成数据已保存至: {output_csv}")
+
 
 if __name__ == "__main__":
     main()

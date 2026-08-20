@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder # , OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import KNNImputer
 from sklearn.impute import MissingIndicator
@@ -39,9 +39,17 @@ class Data:
     def data(self) -> pd.DataFrame:
         return self._data
 
+    @data.setter
+    def data(self, data_content: pd.DataFrame):
+        self._data = data_content
+
     @property
     def metadata(self) -> Metadata:
         return self._metadata
+
+    @metadata.setter
+    def metadata(self, metadata_content: Metadata):
+        self._metadata = metadata_content
 
     @property
     def sdv_metadata(self) -> SingleTableMetadata:
@@ -56,10 +64,17 @@ class Data:
             else:
                 raise DataError("Metadata is not set or does not contain SDV metadata.")
 
-    def __init__(self, data: Optional[DataFrame] = None, metadata: Optional[Metadata] = None):
+    def __init__(self, data: Optional[DataFrame] = None, metadata: Metadata = None):
         # should we not .copy() the dataframe?  atm we do not manipulate ._data.
         self._data = data
-        self._metadata = metadata
+        # if metadata is None -> then use the method of SingleTableMetadata to detect if from data
+        if metadata is None and data is not None:
+            STM = SingleTableMetadata()
+            # self._metadata = Metadata(metadata=STM.detect_from_dataframe(data))
+            STM.detect_from_dataframe(data)
+            self._metadata = Metadata(metadata=STM.to_dict())
+        else:
+            self._metadata = metadata
 
     def read(self, input_file):
         """Generic read method inferring file format from \'magic\'.  Excel and
@@ -76,8 +91,8 @@ class Data:
             raise DataError("Cannot determine input file type: ")
         self._data = data
 
-    def set_metadata(self, metadata: Optional[Metadata] = None):
-        self._metadata = metadata
+    # def set_metadata(self, metadata: Optional[Metadata] = None):
+    #     self._metadata = metadata
 
     def _convert_comma_decimal(self, val):
             if isinstance(val, str):                                                                                                           
@@ -93,11 +108,13 @@ class Data:
 
 
     # def knn_impute_onehot(self, df, n_neighbors=5, cat_cols=None, num_cols=None):
-    def _preprocess_data(self, df, 
-                         n_neighbors=5, 
-                         cat_cols=None, num_cols=None,
-                         keep_nans=False):
-        df = df.copy()
+    def preprocess_data(self, 
+                        n_neighbors=5, 
+                        cat_cols=None, num_cols=None,
+                        keep_nans=False,
+                        inplace=True):
+        
+        df = self.data.copy()
 
         # TODO: review and mb remake, fix the logic for filling in cat_cols and num_cols
         if cat_cols is None:
@@ -124,7 +141,8 @@ class Data:
 
         self.categorical_transformer = Pipeline([
             ("imputer", SimpleImputer(strategy="most_frequent")),
-            ("onehot", OneHotEncoder(handle_unknown="ignore")),
+            # ("onehot", OneHotEncoder(handle_unknown="ignore")),
+            ("ordinal", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)),
         ])
 
         self.preprocessor = ColumnTransformer([
@@ -136,40 +154,26 @@ class Data:
 
         df_proc = self.preprocessor.fit_transform(df)
 
+        # TODO: FIX IN THE CODE BELOW HOW COLUMN NAMES ARE ASSIGNED !!
+        column_names = self.preprocessor.get_feature_names_out()
+        column_names = [name.split("__")[-1] for name in column_names]
+        print(f"Column names after preprocessing: {column_names}")
+        df_proc = pd.DataFrame(df_proc, columns=column_names)
+
         if keep_nans:
             # 将缺失值位置还原为 NaN
-            df_proc = pd.DataFrame(df_proc, columns=self.preprocessor.get_feature_names_out())
+            # df_proc = pd.DataFrame(df_proc, columns=self.preprocessor.get_feature_names_out())
+            # ake sure that column names do not contain prefixes `cat_` or `num_`
             for col in self.original_columns_:
                 if col in df_proc.columns:
                     df_proc.loc[mask_nan[col], col] = np.nan
-                
-        return df_proc
 
+        if inplace:
+            # self._data = pd.DataFrame(df_proc, columns=self.preprocessor.get_feature_names_out())
+            self._data = pd.DataFrame(df_proc, columns=column_names)
+        else:
+            return df_proc
 
-    # def _inverse_transform_data_wrong(self, df_proc: pd.DataFrame) -> pd.DataFrame:
-    #     """Inverse-transform processed data back to the original feature space.
-
-    #     Assumes:
-    #     - self.preprocessor was fitted in _preprocess_data
-    #     - self.original_columns_ was recorded before fitting
-    #     """
-    #     if not hasattr(self, "preprocessor") or self.preprocessor is None:
-    #         raise ValueError("No fitted preprocessor found. Call _preprocess_data() first.")
-
-    #     if not hasattr(self, "original_columns_"):
-    #         raise ValueError(
-    #             "Original columns were not stored. Set self.original_columns_ "
-    #             "before fitting the preprocessor."
-    #         )
-
-    #     X = np.asarray(df_proc)
-    #     if X.ndim == 1:
-    #         X = X.reshape(1, -1)
-
-    #     # This is the correct inverse of a fitted ColumnTransformer
-    #     inv = self.preprocessor.inverse_transform(X)
-
-    #     return pd.DataFrame(inv, columns=self.original_columns_)
 
     def _inverse_transform_data(self, df_proc: pd.DataFrame) -> pd.DataFrame:
         """Inverse-transform data using the fitted sub-transformers."""

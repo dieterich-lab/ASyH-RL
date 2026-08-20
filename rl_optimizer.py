@@ -5,6 +5,7 @@ import sys
 import os
 import warnings
 from typing import Dict, List
+import inspect
 # from sklearn.mixture import GaussianMixture
 # from sklearn.preprocessing import StandardScaler, OneHotEncoder
 # from sklearn.compose import ColumnTransformer
@@ -40,15 +41,22 @@ class RLOptimizer:
 
         self.train_df = self.train_data.data
         self.val_df = self.val_data.data
-        self.discrete_columns = discrete_columns
+        self.discrete_columns = self._detect_discrete_columns(self.train_df) if discrete_columns is None else discrete_columns
+        self.continuous_cols = list(set(self.train_df.columns) - set(self.discrete_columns))
+
+        self.train_data_transformed = self.train_data.preprocess_data(inplace=False)
+
+        # import ipdb; ipdb.set_trace()
+        # wrap it as an instance of the class Data
+        self.train_data_transformed = Data(data=self.train_data_transformed, metadata=self.train_data.metadata)
 
         self.target_feature = target_feature
-        
+
         # 定义搜索空间
         self.modelParamSpace = modelParamSpace
         
         # self.action_size = len(self.n_components_options) * len(self.max_iter_options) * len(self.n_init_options)
-        assert self.model_params is not None, "model_params cannot be None"
+        assert self.modelParamSpace is not None, "model_params cannot be None"
         self.action_size = np.abs(np.prod([len(v) for v in self.modelParamSpace.values()]))
 
         self.state_size = 4 
@@ -68,6 +76,9 @@ class RLOptimizer:
         self.best_score = -np.inf
         self.optimization_history = {'rewards': []}
 
+    def _detect_discrete_columns(self, df, threshold=20):                                                                     
+        """Recognize discrete columns and return a list of their names."""                                                                              
+        return [col for col in df.columns if df[col].dtype == 'object' or df[col].nunique() <= threshold]
 
     def _generate_synthetic_data(self,
                                  modelClass: type,
@@ -76,9 +87,23 @@ class RLOptimizer:
         # import ipdb; ipdb.set_trace()
         n_samples = n_samples if n_samples else len(self.df_train_model)
 
-        model = modelClass(**params)
+        if hasattr(modelClass, '__init__'):
+            listModelClassArgs = list(inspect.signature(modelClass.__init__).parameters)
+        else:
+            raise TypeError(f"{modelClass} does not have an __init__ method.")
+
+        if 'override_args' in listModelClassArgs:
+            model = modelClass(override_args=params) # TODO: fix possible execution failure here
+        else:
+            model = modelClass(**params) # TODO: fix possible execution failure here
+
         model.fit(self.train_data_transformed)
-        samples, _ = model.sample(n_samples)
+        model_output = model.sample(n_samples)
+
+        if isinstance(model_output, list):
+            samples = np.array(model_output[0])  # Assuming the first element is the synthetic data
+        else:
+            samples = np.array(model_output)
         
         num_c = len(self.continuous_cols)
         inv_num = self.preprocessor.named_transformers_['num'].inverse_transform(samples[:, :num_c])
@@ -89,7 +114,7 @@ class RLOptimizer:
         # return df_syn[self.df_train_model.columns]
         # order columns of `df_syn` in the same way as they're ordered in `self.train_data_transformed` dataframe
         return df_syn[self.df_train_model.columns]
-        # except: return None
+
 
     def _evaluate_synthetic_data(self, synthetic_data: pd.DataFrame) -> Dict:
         """核心评估：对比验证集"""
@@ -116,6 +141,7 @@ class RLOptimizer:
             'js_score': 1.0 - fid_rep['univariate_distributions']['overall_js_score']   
         }
         # except: return {'tvd_score': 0.0, 'utility_score': 0.0, 'ks_score': 0.0, 'js_score': 0.0}
+    
     
     def evaluate_synthetic_data(self, synthetic_data: pd.DataFrame) -> Dict:
             """核心评估：对比验证集"""
@@ -144,7 +170,7 @@ class RLOptimizer:
                 'js_score': 1.0 - fid_rep['univariate_distributions']['overall_js_score']
             }
 
-    def optimize(self, episodes=30, verbose=True):
+    def optimize(self, episodes=30, verbose=True, modelClass: type=None):
         print("开始基于验证集的 RL 优化...")
         for ep in range(episodes):
             print(f"Episode {ep+1}/{episodes} - Last Eval: {self.last_eval}")
@@ -158,7 +184,7 @@ class RLOptimizer:
 
             # import ipdb; ipdb.set_trace()  # Debugging point to inspect the parameters and state before generating synthetic data
 
-            syn = self._generate_synthetic_data(params)
+            syn = self._generate_synthetic_data(modelClass, params)
             print(f"  Generated Synthetic Data Shape: {syn.shape if syn is not None else 'None'}")
             if syn is None: continue
                 

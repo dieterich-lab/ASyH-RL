@@ -140,6 +140,14 @@ class Model(ABC):
             sample_size = self._input_data_size
         return self.sdv_model.sample(sample_size)
 
+
+    # alias function `sample` which is in the fact the same as `synthesize()`
+    def sample(self, sample_size: int = -1, 
+               data=None) -> DataFrame:
+        '''Create synthetic data.'''
+        return self.synthesize(sample_size=sample_size, data=data)
+    
+
     @abstractmethod
     def adapted_arguments(self, data: Optional[Data] = None) -> Dict[str, Any]:
         '''Method for specific models to adapt the constructor arguments to
