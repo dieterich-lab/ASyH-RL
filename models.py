@@ -172,6 +172,9 @@ class GaussianCopulaModel(Model):
     def adapted_arguments(self, data: Optional[Data] = None) -> Dict[str, Any]:
         '''Method to adapt the Gaussian Copula sdv model internals to data'''
         args = {'metadata': get_metadata_from_data(data)}
+        # skip the expensive per-distribution tuning loop if override_args already fixes it
+        if self._override_args and 'default_distribution' in self._override_args:
+            return args
         args.update(self._tune_GCM_distributions(data))
         return args
 

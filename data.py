@@ -135,12 +135,14 @@ class Data:
         # categorical_features = df.select_dtypes(exclude=["number"]).columns
 
         self.numeric_transformer = Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
+            ("imputer", SimpleImputer(strategy="median",
+                                      add_indicator=True)),
             ("scaler", StandardScaler()),
         ])
 
         self.categorical_transformer = Pipeline([
-            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("imputer", SimpleImputer(strategy="most_frequent", 
+                                      add_indicator=True)),
             # ("onehot", OneHotEncoder(handle_unknown="ignore")),
             ("ordinal", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)),
         ])

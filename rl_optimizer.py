@@ -44,11 +44,19 @@ class RLOptimizer:
         self.discrete_columns = self._detect_discrete_columns(self.train_df) if discrete_columns is None else discrete_columns
         self.continuous_cols = list(set(self.train_df.columns) - set(self.discrete_columns))
 
+        # ensure continuous columns are numeric everywhere evaluators consume them
+        self.train_df = self._coerce_continuous_numeric(self.train_df)
+        self.val_df = self._coerce_continuous_numeric(self.val_df)
+
         self.train_data_transformed = self.train_data.preprocess_data(inplace=False)
+
+        # subsample 100 rows from `train_data_transformed` to execute `fit()` faster
+        self.train_data_transformed = self.train_data_transformed.sample(n=min(100, len(self.train_data_transformed)), random_state=42)
 
         # import ipdb; ipdb.set_trace()
         # wrap it as an instance of the class Data
-        self.train_data_transformed = Data(data=self.train_data_transformed, metadata=self.train_data.metadata)
+        self.train_data_transformed = Data(data = self.train_data_transformed, 
+                                           metadata = None) # self.train_data.metadata)
 
         self.target_feature = target_feature
 
@@ -80,11 +88,18 @@ class RLOptimizer:
         """Recognize discrete columns and return a list of their names."""                                                                              
         return [col for col in df.columns if df[col].dtype == 'object' or df[col].nunique() <= threshold]
 
-    def _generate_synthetic_data(self,
-                                 modelClass: type,
-                                 params: Dict, 
-                                 n_samples: int = 100) -> pd.DataFrame:
-        # import ipdb; ipdb.set_trace()
+    def _coerce_continuous_numeric(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Coerce continuous columns (mixed str/float object dtype, e.g. '65.0') to numeric."""
+        df = df.copy()
+        for col in self.continuous_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        return df
+
+
+    # In rl_optimizer.py
+
+    def _generate_synthetic_data(self, modelClass: type, params: Dict, n_samples: int = 100) -> pd.DataFrame:
         n_samples = n_samples if n_samples else len(self.df_train_model)
 
         if hasattr(modelClass, '__init__'):
@@ -93,27 +108,92 @@ class RLOptimizer:
             raise TypeError(f"{modelClass} does not have an __init__ method.")
 
         if 'override_args' in listModelClassArgs:
-            model = modelClass(override_args=params) # TODO: fix possible execution failure here
+            model = modelClass(override_args=params)
         else:
-            model = modelClass(**params) # TODO: fix possible execution failure here
+            model = modelClass(**params)
 
         model.fit(self.train_data_transformed)
         model_output = model.sample(n_samples)
 
         if isinstance(model_output, list):
-            samples = np.array(model_output[0])  # Assuming the first element is the synthetic data
+            samples = np.array(model_output[0])
         else:
             samples = np.array(model_output)
         
-        num_c = len(self.continuous_cols)
-        inv_num = self.preprocessor.named_transformers_['num'].inverse_transform(samples[:, :num_c])
-        inv_cat = self.preprocessor.named_transformers_['cat'].inverse_transform(samples[:, num_c:])
+        preprocessor = self.train_data.preprocessor
+        num_transformer = preprocessor.named_transformers_['num']
+        cat_transformer = preprocessor.named_transformers_['cat']
+
+        num_cols = list(preprocessor.transformers_[0][2])
+        cat_cols = list(preprocessor.transformers_[1][2])
+
+        # Convert array samples back into a DataFrame matching transformed column names
+        full_feature_names = list(preprocessor.get_feature_names_out())
+        df_samples = pd.DataFrame(samples, columns=[name.split("__")[-1] for name in full_feature_names])
+
+        # scaler/ordinal were fit on their branch's *full* output (incl. own missingindicator_* cols),
+        # so we must feed all of those back in before slicing out the real columns
+        num_branch_cols = [name.split("__")[-1] for name in full_feature_names if name.startswith("num__")]
+        cat_branch_cols = [name.split("__")[-1] for name in full_feature_names if name.startswith("cat__")]
+
+        # 1. Inverse transform numeric features using the scaler step, then drop indicator columns
+        scaler = num_transformer.named_steps['scaler']
+        inv_num_full = scaler.inverse_transform(df_samples[num_branch_cols].values)
+        inv_num = inv_num_full[:, :len(num_cols)]
+
+        # 2. Inverse transform categorical features using ordinal step, then drop indicator columns
+        ordinal = cat_transformer.named_steps['ordinal']
+        inv_cat_full = ordinal.inverse_transform(df_samples[cat_branch_cols].values)
+        inv_cat = inv_cat_full[:, :len(cat_cols)]
+
+        df_syn = pd.concat([
+            pd.DataFrame(inv_num, columns=num_cols),
+            pd.DataFrame(inv_cat, columns=cat_cols)
+        ], axis=1)
+
+        return df_syn[self.train_df.columns]
+
+    # def _generate_synthetic_data(self,
+    #                              modelClass: type,
+    #                              params: Dict, 
+    #                              n_samples: int = 100) -> pd.DataFrame:
+    #     # import ipdb; ipdb.set_trace()
+    #     n_samples = n_samples if n_samples else len(self.df_train_model)
+
+    #     if hasattr(modelClass, '__init__'):
+    #         listModelClassArgs = list(inspect.signature(modelClass.__init__).parameters)
+    #     else:
+    #         raise TypeError(f"{modelClass} does not have an __init__ method.")
+
+    #     if 'override_args' in listModelClassArgs:
+    #         model = modelClass(override_args=params) # TODO: fix possible execution failure here
+    #     else:
+    #         model = modelClass(**params) # TODO: fix possible execution failure here
+
+    #     model.fit(self.train_data_transformed)
+    #     model_output = model.sample(n_samples)
+
+    #     if isinstance(model_output, list):
+    #         samples = np.array(model_output[0])  # Assuming the first element is the synthetic data
+    #     else:
+    #         samples = np.array(model_output)
         
-        df_syn = pd.concat([pd.DataFrame(inv_num, columns=self.continuous_cols),
-                            pd.DataFrame(inv_cat, columns=self.discrete_cols)], axis=1)
-        # return df_syn[self.df_train_model.columns]
-        # order columns of `df_syn` in the same way as they're ordered in `self.train_data_transformed` dataframe
-        return df_syn[self.df_train_model.columns]
+    #     preprocessor = self.train_data.preprocessor
+    #     output_indices = getattr(preprocessor, 'output_indices_', None)
+    #     if output_indices is None or 'num' not in output_indices or 'cat' not in output_indices:
+    #         raise ValueError("Fitted preprocessor.output_indices_ must contain 'num' and 'cat' slices.")
+
+    #     num_slice = output_indices['num']
+    #     cat_slice = output_indices['cat']
+
+    #     inv_num = preprocessor.named_transformers_['num'].inverse_transform(samples[:, num_slice])
+    #     inv_cat = preprocessor.named_transformers_['cat'].inverse_transform(samples[:, cat_slice])
+        
+    #     df_syn = pd.concat([pd.DataFrame(inv_num, columns=self.continuous_cols),
+    #                         pd.DataFrame(inv_cat, columns=self.discrete_cols)], axis=1)
+    #     # return df_syn[self.df_train_model.columns]
+    #     # order columns of `df_syn` in the same way as they're ordered in `self.train_data_transformed` dataframe
+    #     return df_syn[self.df_train_model.columns]
 
 
     def _evaluate_synthetic_data(self, synthetic_data: pd.DataFrame) -> Dict:
@@ -146,18 +226,19 @@ class RLOptimizer:
     def evaluate_synthetic_data(self, synthetic_data: pd.DataFrame) -> Dict:
             """核心评估：对比验证集"""
             # try:
-            fid = FidelityEvaluator(self.df_train_model, synthetic_data, self.discrete_cols)
+            synthetic_data = self._coerce_continuous_numeric(synthetic_data)
+            fid = FidelityEvaluator(self.train_df, synthetic_data, self.discrete_columns)
             fid_rep = fid.get_detailed_report()
     
             # import ipdb; ipdb.set_trace()
             
             # 修正语法错误：去掉参数名前的 self.
             util = UtilityEvaluator(
-                real_train=self.df_train_model, 
-                real_test=self.df_val_model, 
+                real_train=self.train_df, 
+                real_test=self.val_df, 
                 synthetic_data=synthetic_data, 
                 target_column=self.target_feature, 
-                discrete_columns=self.discrete_cols
+                discrete_columns=self.discrete_columns
             )
             util_rep = util.get_detailed_report()
             
@@ -171,6 +252,7 @@ class RLOptimizer:
             }
 
     def optimize(self, episodes=30, verbose=True, modelClass: type=None):
+        self.modelClass = modelClass
         print("开始基于验证集的 RL 优化...")
         for ep in range(episodes):
             print(f"Episode {ep+1}/{episodes} - Last Eval: {self.last_eval}")
@@ -220,7 +302,7 @@ class RLOptimizer:
         return new_params
 
     def generate_with_best_params(self, output_path, n_samples=1000):
-        syn = self._generate_synthetic_data(self.best_params, n_samples)
+        syn = self._generate_synthetic_data(self.modelClass, self.best_params, n_samples)
         syn.to_csv(output_path, index=False)
         return output_path
     def get_best_params(self): return self.best_params

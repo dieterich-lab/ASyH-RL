@@ -15,12 +15,17 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class UtilityEvaluator:
-    
+
+    # baseline (real-train-vs-real-test) results only depend on real_train/real_test,
+    # so cache them across episodes instead of retraining on every call
+    _baseline_cache: Dict[Any, Dict[str, Any]] = {}
+
     def __init__(self, real_train: pd.DataFrame, real_test: pd.DataFrame, 
                  synthetic_data: pd.DataFrame, target_column: str, discrete_columns: list = None):
         """
         Initializes the evaluator with pre-split training and testing sets.
         """
+        self._baseline_cache_key = (id(real_train), id(real_test), target_column)
         self.real_train = real_train.copy()
         self.real_test = real_test.copy()
         self.synthetic_data = synthetic_data.copy()
@@ -94,12 +99,17 @@ class UtilityEvaluator:
         }
     
         results = {'baseline': {}, 'tstr': {}, 'utility_scores': {}}
+        cached_baseline = self._baseline_cache.get(self._baseline_cache_key)
     
         for model_name, model in models.items():
-            model_baseline = type(model)(**model.get_params())
-            model_baseline.fit(X_train_real_scaled, y_train_real)
-            y_pred_baseline = model_baseline.predict(X_test_real_scaled)
-            baseline_metrics = self._compute_metrics(y_test_real, y_pred_baseline, model_baseline, X_test_real_scaled)
+            if cached_baseline is not None and model_name in cached_baseline:
+                baseline_metrics = cached_baseline[model_name]
+            else:
+                model_baseline = type(model)(**model.get_params())
+                model_baseline.fit(X_train_real_scaled, y_train_real)
+                y_pred_baseline = model_baseline.predict(X_test_real_scaled)
+                baseline_metrics = self._compute_metrics(y_test_real, y_pred_baseline, model_baseline, X_test_real_scaled)
+                self._baseline_cache.setdefault(self._baseline_cache_key, {})[model_name] = baseline_metrics
         
             model_tstr = type(model)(**model.get_params())
             model_tstr.fit(X_train_syn_scaled, y_train_syn)

@@ -38,11 +38,11 @@ class FidelityEvaluator:
         for col in self.continuous_columns:
             if col in self.real_data.columns and self.real_data[col].isnull().any():
                 fill_val = self.real_data[col].median()
-                self.real_data[col].fillna(fill_val, inplace=True)
-            
+                self.real_data[col] = self.real_data[col].fillna(fill_val)
+
             if col in self.synthetic_data.columns and self.synthetic_data[col].isnull().any():
                 fill_val = self.synthetic_data[col].median()
-                self.synthetic_data[col].fillna(fill_val, inplace=True)
+                self.synthetic_data[col] = self.synthetic_data[col].fillna(fill_val)
         
     def evaluate_univariate_distributions(self) -> Dict[str, float]:
         """
