@@ -10,11 +10,14 @@ import numpy as np
 from rl_optimizer import RLOptimizer
 from sklearn.compose import ColumnTransformer
 from models import GaussianCopulaModel
+from models import CopulaGANModel
+from models import TVAEModel
+from models import CTGANModel
 from data import Data
 
 
-def main():
-    MODEL = GaussianCopulaModel
+def invoke_model(MODEL):
+    # MODEL = TVAEModel # CopulaGANModel # GaussianCopulaModel
     print("=" * 80)
     print(f"{MODEL.__qualname__} Hyperparameter Optimization (RL-driven with Val Set)")
     print("=" * 80)
@@ -45,7 +48,11 @@ def main():
     train_data = Data(train_data)
     val_data = Data(val_data)
 
-    modelParamSpace = {'default_distribution':['norm', 'beta']}
+    modelParamSpace = { #'default_distribution':['norm', 'beta'], 
+                       'enforce_min_max_values':[True,False], 
+                       'epochs':[400,500,600], 
+                       #'verbose':[True]
+                       }
     
     optimizer = RLOptimizer(
         train_data = train_data, 
@@ -62,9 +69,17 @@ def main():
     best_params = optimizer.get_best_params()
     print(f"\n最佳参数已选定: {best_params}")
     
-    output_csv = 'synthetic_data_gmm_optimized_fixed.csv'
+    output_csv = f'synthetic_data_{MODEL.__qualname__}_optimized_fixed.csv'
     optimizer.generate_with_best_params(output_csv, n_samples=6900)
-    print(f"✓ 合成数据已保存至: {output_csv}")
+    print(f"✓ The synthesis has been completed: {output_csv}")
+
+
+def main():
+    # MODELS = [GaussianCopulaModel, CopulaGANModel, CTGANModel]
+    MODELS = [CTGANModel, GaussianCopulaModel, CopulaGANModel]
+
+    for model in MODELS:
+        invoke_model(model)
 
 
 if __name__ == "__main__":

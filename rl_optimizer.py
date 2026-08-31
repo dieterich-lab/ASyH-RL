@@ -41,6 +41,7 @@ class RLOptimizer:
 
         self.train_df = self.train_data.data
         self.val_df = self.val_data.data
+
         self.discrete_columns = self._detect_discrete_columns(self.train_df) if discrete_columns is None else discrete_columns
         self.continuous_cols = list(set(self.train_df.columns) - set(self.discrete_columns))
 
@@ -64,21 +65,24 @@ class RLOptimizer:
         self.modelParamSpace = modelParamSpace
         
         # self.action_size = len(self.n_components_options) * len(self.max_iter_options) * len(self.n_init_options)
-        assert self.modelParamSpace is not None, "model_params cannot be None"
-        self.action_size = np.abs(np.prod([len(v) for v in self.modelParamSpace.values()]))
+        # assert self.modelParamSpace is not None, "model_params cannot be None"
 
-        self.state_size = 4 
+        if isinstance(self.modelParamSpace, dict):
+            self.action_size = np.abs(np.prod([len(v) for v in self.modelParamSpace.values()]))
+
+            self.state_size = 4 
+            
+            # self._load_and_preprocess_data()
+            
+            self.agent = QLearningAgent(
+                state_size=self.state_size, action_size=self.action_size,
+                learning_rate=0.1, discount_factor=0.95, epsilon=1.0,
+                # epsilon_decay=0.995, 
+                # epsilon_min=0.01
+            )
+
         self.last_eval = {'tvd_score': 0.5, 'utility_score': 0.5, 
-                          'ks_score': 0.5, 'js_score': 0.5}
-        
-        # self._load_and_preprocess_data()
-        
-        self.agent = QLearningAgent(
-            state_size=self.state_size, action_size=self.action_size,
-            learning_rate=0.1, discount_factor=0.95, epsilon=1.0,
-            # epsilon_decay=0.995, 
-            # epsilon_min=0.01
-        )
+                                  'ks_score': 0.5, 'js_score': 0.5}
         
         self.best_params = None
         self.best_score = -np.inf
@@ -112,6 +116,8 @@ class RLOptimizer:
         else:
             model = modelClass(**params)
 
+        # import ipdb; ipdb.set_trace()
+
         model.fit(self.train_data_transformed)
         model_output = model.sample(n_samples)
 
@@ -138,6 +144,9 @@ class RLOptimizer:
 
         # 1. Inverse transform numeric features using the scaler step, then drop indicator columns
         scaler = num_transformer.named_steps['scaler']
+
+        # import ipdb; ipdb.set_trace()
+
         inv_num_full = scaler.inverse_transform(df_samples[num_branch_cols].values)
         inv_num = inv_num_full[:, :len(num_cols)]
 
@@ -223,23 +232,56 @@ class RLOptimizer:
         # except: return {'tvd_score': 0.0, 'utility_score': 0.0, 'ks_score': 0.0, 'js_score': 0.0}
     
     
-    def evaluate_synthetic_data(self, synthetic_data: pd.DataFrame) -> Dict:
+    def _stratified_subsample(self, df: pd.DataFrame, n_rows: int, random_state: int = 42) -> pd.DataFrame:
+        """Subsample n_rows from df, guaranteeing every target class present in df keeps at least one row.
+
+        A plain `.sample()` can drop rare target classes entirely, which later makes
+        roc_auc_score raise ValueError because the trained model's class count no
+        longer matches the number of classes seen in the (separate) test split.
+        """
+        if self.target_feature not in df.columns or len(df) <= n_rows:
+            return df.sample(n=min(n_rows, len(df)), random_state=random_state)
+
+        one_per_class = df.groupby(self.target_feature, group_keys=False).sample(n=1, random_state=random_state)
+        remaining_needed = n_rows - len(one_per_class)
+        if remaining_needed <= 0:
+            return one_per_class.sample(n=n_rows, random_state=random_state)
+
+        remaining_pool = df.drop(index=one_per_class.index)
+        extra = remaining_pool.sample(n=min(remaining_needed, len(remaining_pool)), random_state=random_state)
+        return pd.concat([one_per_class, extra]).sample(frac=1, random_state=random_state)
+
+    def evaluate_synthetic_data(self, synthetic_data: pd.DataFrame, n_rows: int = 100) -> Dict:
             """核心评估：对比验证集"""
             # try:
             synthetic_data = self._coerce_continuous_numeric(synthetic_data)
-            fid = FidelityEvaluator(self.train_df, synthetic_data, self.discrete_columns)
+
+            # sumbsample `n_rows` from self.train_df and synthetic_data, they should be the rows from same positions but chosen randomly
+            sub_train_data = self._stratified_subsample(self.train_df, n_rows)
+            sub_synthetic_data = synthetic_data.sample(n=min(n_rows, len(synthetic_data)), random_state=42)
+
+            # fid = FidelityEvaluator(self.train_df, synthetic_data, self.discrete_columns)
+            fid = FidelityEvaluator(sub_train_data, sub_synthetic_data, self.discrete_columns)
             fid_rep = fid.get_detailed_report()
     
             # import ipdb; ipdb.set_trace()
             
             # 修正语法错误：去掉参数名前的 self.
+            # util = UtilityEvaluator(
+            #     real_train=self.train_df, 
+            #     real_test=self.val_df, 
+            #     synthetic_data=synthetic_data, 
+            #     target_column=self.target_feature, 
+            #     discrete_columns=self.discrete_columns
+            # )
             util = UtilityEvaluator(
-                real_train=self.train_df, 
-                real_test=self.val_df, 
-                synthetic_data=synthetic_data, 
-                target_column=self.target_feature, 
-                discrete_columns=self.discrete_columns
+                real_train=sub_train_data,
+                real_test=self.val_df,
+                synthetic_data=sub_synthetic_data,
+                target_column=self.target_feature,
+                discrete_columns=self.discrete_columns,
             )
+
             util_rep = util.get_detailed_report()
             
             return {

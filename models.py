@@ -73,7 +73,7 @@ class CTGAN2(sdv.single_table.CTGANSynthesizer):
         curr_time = datetime.datetime.now()
         # random_state = int(curr_time.timestamp() * 1e+6)
         timestamp_r = str(curr_time.timestamp())[::-1]
-        random_a = int(timestamp_r[:6] + timestamp_r[7:])
+        random_a = int("".join(re.findall(r'\d', timestamp_r)))
         checksum = subprocess.check_output(['cksum', '/var/log/lastlog'])
         random_b = int("".join(re.findall(r'\d', str(checksum))))
         random_state = (random_a + random_b) % RAND_MAX
