@@ -48,11 +48,20 @@ def invoke_model(MODEL):
     train_data = Data(train_data)
     val_data = Data(val_data)
 
-    modelParamSpace = { #'default_distribution':['norm', 'beta'], 
+    modelParamSpace = {'default_distribution':['gamma', 'norm'], # 'beta'], 
                        'enforce_min_max_values':[True,False], 
                        'epochs':[400,500,600], 
-                       #'verbose':[True]
+                       'verbose':[True]
                        }
+
+    # import ipdb; ipdb.set_trace()
+
+    valid_param_names = MODEL()._sdv_model_class.__init__.__code__.co_varnames
+
+    # check each key of modelParamSpace, if it's present in `valid_param_names`
+    # if not - delete the key
+    modelParamSpace = {k: v for k, v in modelParamSpace.items() if k in valid_param_names}
+    print(f"\n[CLEO-RL] Valid hyperparameter search space for {MODEL.__qualname__}: {modelParamSpace}")
     
     optimizer = RLOptimizer(
         train_data = train_data, 
@@ -76,7 +85,9 @@ def invoke_model(MODEL):
 
 def main():
     # MODELS = [GaussianCopulaModel, CopulaGANModel, CTGANModel]
-    MODELS = [CTGANModel, GaussianCopulaModel, CopulaGANModel]
+    # MODELS = [CTGANModel, GaussianCopulaModel, CopulaGANModel]
+    # MODELS = [GaussianCopulaModel, CopulaGANModel]
+    MODELS = [CopulaGANModel]
 
     for model in MODELS:
         invoke_model(model)
