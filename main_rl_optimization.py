@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from rl_optimizer import RLOptimizer
 from sklearn.compose import ColumnTransformer
+from sklearn.mixture import GaussianMixture
 from models import GaussianCopulaModel
 from models import CopulaGANModel
 from models import TVAEModel
@@ -22,22 +23,23 @@ def invoke_model(MODEL):
     print(f"{MODEL.__qualname__} Hyperparameter Optimization (RL-driven with Val Set)")
     print("=" * 80)
     
-    # 1. 路径配置
-    train_data_path = 'puf_narrow/train.csv' # 80%
-    val_data_path = 'puf_narrow/val.csv'     # 10%
+    # 1. Provide valid paths
+    train_data_path = 'puf_wide/train.csv' # 80%
+    val_data_path = 'puf_wide/val.csv'     # 10%
     
     if not os.path.exists(train_data_path) or not os.path.exists(val_data_path):
-        print("错误: 找不到 train.csv 或 val.csv。请先运行 split_data.py！")
+        print("Invalid path to - train.csv or val！")
         sys.exit(1)
     
-    # 2. 初始化优化器 (解决 TypeError: 统一参数名为 val_path)
+    # 2. Open the csv table with data for training
     df = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
-    # discrete_columns = ['类型', 'agegroup', 'sex', 'location', 'status', 'SAHfh', 'drink', 'smoke',
+    # discrete_columns = ['agegroup', 'sex', 'location', 'status', 'SAHfh', 'drink', 'smoke',
                         # 'HBP', 'DM', 'IS', 'CAD', 'number', 'shape1', 'maxgroup', 'shape2']
     # discrete_columns = ['cohort']
     cont_columns = []
     for col in df.columns:
-        if df[col].nunique() > 20:
+        is_numeric = pd.api.types.is_numeric_dtype(df[col])
+        if is_numeric or df[col].nunique() > 20:
             cont_columns.append(col)
 
     discrete_columns = list([col for col in df.columns if col not in cont_columns])
@@ -45,40 +47,71 @@ def invoke_model(MODEL):
 
     train_data = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
     val_data = pd.read_csv(val_data_path, sep=',', on_bad_lines='skip')
+
+    # introduce a new column `row_id`, where each element is a string of format "pXvY", 
+    # `X` is the value in `Pat_ID.numeric` on the same row
+    #`Y`is the value in `Visite.numeric` on the same row
+    new_col_name = 'row_id'
+    discrete_columns.append(new_col_name)
+    train_data[new_col_name] = train_data.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
+    val_data[new_col_name] = val_data.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
+
     train_data = Data(train_data)
     val_data = Data(val_data)
+
+    # assign the column `Pat_ID.numeric` in metadata as a primary key
+    train_data.metadata.metadata.primary_key = 'row_id'
+    val_data.metadata.metadata.primary_key = 'row_id'
+    # assing the sdtype of the column 'Pad_ID.numeric' as 'id'
+    train_data.metadata.metadata.update_column(column_name='row_id',
+                                        sdtype='id') # pii=False)
+    val_data.metadata.metadata.update_column(column_name='row_id',
+                                        sdtype='id') # pii=False)
+    # assign the sdtype of the column "ethnicity" as categorical
+    train_data.metadata.metadata.update_column(column_name='ethnicity',
+                                      sdtype='categorical') # pii=False)
+    val_data.metadata.metadata.update_column(column_name='ethnicity',
+                                          sdtype='categorical') # , pii=False)
+    # import ipdb; ipdb.set_trace()
+    
 
     modelParamSpace = {'default_distribution':['gamma', 'norm'], # 'beta'], 
                        'enforce_min_max_values':[True,False], 
                        'epochs':[400,500,600], 
-                       'verbose':[True]
-                       }
+                       'verbose':[True],
+                       'n_components':[5, 10, 15],
+                       'n_inits':[1, 3, 5],
+                       'max_iter':[100, 200, 300]}
 
     # import ipdb; ipdb.set_trace()
 
-    valid_param_names = MODEL()._sdv_model_class.__init__.__code__.co_varnames
+    if hasattr(MODEL(), '_sdv_model_class'):
+        valid_param_names = MODEL()._sdv_model_class.__init__.__code__.co_varnames
+    else:
+        valid_param_names = MODEL.__init__.__code__.co_varnames
 
     # check each key of modelParamSpace, if it's present in `valid_param_names`
     # if not - delete the key
     modelParamSpace = {k: v for k, v in modelParamSpace.items() if k in valid_param_names}
-    print(f"\n[CLEO-RL] Valid hyperparameter search space for {MODEL.__qualname__}: {modelParamSpace}")
+    print(f"\n[RL-Asyh] Valid hyperparameter search space for {MODEL.__qualname__}: {modelParamSpace}")
     
     optimizer = RLOptimizer(
         train_data = train_data, 
-        val_data = val_data, # 这里的参数名必须叫 val_path
+        val_data = val_data, 
         discrete_columns=discrete_columns,
-        modelParamSpace=modelParamSpace
+        modelParamSpace=modelParamSpace,
+        target_feature = 'score-eq5d-5l' # 'score-eq5d-5l_start'
     )
     
-    # 3. 执行优化
-    print("\n[CLEO-RL] 优化中...")
+    # 3. Optimize model h-params with rl-agent
+    print("\n[RL-Asyh] running the optimization ...")
     optimizer.optimize(episodes=30, modelClass=MODEL)
     
-    # 4. 生成最终数据
+    # 4. Collect the best h-params
     best_params = optimizer.get_best_params()
-    print(f"\n最佳参数已选定: {best_params}")
+    print(f"\n Best parameters: {best_params}")
     
-    output_csv = f'synthetic_data_{MODEL.__qualname__}_optimized_fixed.csv'
+    output_csv = f'synthetic_data_{MODEL.__qualname__}_wide.csv'
     optimizer.generate_with_best_params(output_csv, n_samples=6900)
     print(f"✓ The synthesis has been completed: {output_csv}")
 
@@ -87,7 +120,8 @@ def main():
     # MODELS = [GaussianCopulaModel, CopulaGANModel, CTGANModel]
     # MODELS = [CTGANModel, GaussianCopulaModel, CopulaGANModel]
     # MODELS = [GaussianCopulaModel, CopulaGANModel]
-    MODELS = [CopulaGANModel]
+    MODELS = [CTGANModel, GaussianCopulaModel, 
+              TVAEModel, CopulaGANModel] # TODO: GaussianMixture, 
 
     for model in MODELS:
         invoke_model(model)

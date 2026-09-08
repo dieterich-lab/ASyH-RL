@@ -72,7 +72,12 @@ class Data:
             STM = SingleTableMetadata()
             # self._metadata = Metadata(metadata=STM.detect_from_dataframe(data))
             STM.detect_from_dataframe(data)
-            self._metadata = Metadata(metadata=STM.to_dict())
+            dict_stm = STM.to_dict()
+            # the key 'ethinicity' should have the value 'categorical' if it is present in dict_stm keys
+            # if 'ethnicity' in dict_stm['columns']:
+            #     # dict_stm['columns']['ethnicity']['sdtype'] = 'categorical'
+            #     dict_stm['columns']['ethnicity']['sdtype'] = 'numerical'
+            self._metadata = Metadata(metadata=dict_stm)
         else:
             self._metadata = metadata
 
@@ -103,8 +108,14 @@ class Data:
             return val
     
     def _detect_discrete_columns(self, df, threshold=10):
-        """内部自动推断分类变量，避免导入错误"""
-        return [col for col in df.columns if df[col].dtype == 'object' or df[col].nunique() <= threshold]
+        """ Recognize categorical / discrete columns """
+        # return [col for col in df.columns if df[col].dtype == 'object' or df[col].nunique() <= threshold]
+        cols = []
+        for col in df.columns:
+            is_numeric = pd.api.types.is_numeric_dtype(df[col])
+            if not is_numeric and df[col].nunique() <= threshold:
+                cols.append(col)
+        return cols
 
 
     # def knn_impute_onehot(self, df, n_neighbors=5, cat_cols=None, num_cols=None):
@@ -116,11 +127,19 @@ class Data:
         
         df = self.data.copy()
 
-        # TODO: review and mb remake, fix the logic for filling in cat_cols and num_cols
         if cat_cols is None:
             cat_cols = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
         if num_cols is None:
             num_cols = df.select_dtypes(include=['number']).columns.tolist()
+
+        # check if a column name containing substring 'Pat_ID' is present either in cat_cols or num_cols
+        # if yes - then delete it
+        # for col in df.columns:
+        #     if 'Pat_ID' in col:
+        #         if col in cat_cols:
+        #             cat_cols.remove(col)
+        #         if col in num_cols:
+        #             num_cols.remove(col)
 
         mask_nan = df.isna()
 
@@ -150,9 +169,11 @@ class Data:
         self.preprocessor = ColumnTransformer([
             ("num", self.numeric_transformer, num_cols),
             ("cat", self.categorical_transformer, cat_cols),
-        ], remainder="drop")
+        ], remainder="passthrough")
 
         self.original_columns_ = list(df.columns)
+
+        # import ipdb; ipdb.set_trace()
 
         df_proc = self.preprocessor.fit_transform(df)
 
@@ -163,7 +184,6 @@ class Data:
         df_proc = pd.DataFrame(df_proc, columns=column_names)
 
         if keep_nans:
-            # 将缺失值位置还原为 NaN
             # df_proc = pd.DataFrame(df_proc, columns=self.preprocessor.get_feature_names_out())
             # ake sure that column names do not contain prefixes `cat_` or `num_`
             for col in self.original_columns_:

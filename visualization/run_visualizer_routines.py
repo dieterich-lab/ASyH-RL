@@ -21,7 +21,9 @@ def main():
     train_path = 'puf_narrow/train.csv'
     val_path = 'puf_narrow/val.csv'
     # syn_path = 'tables4comparison/synthetic_data_gmm_optimized_fixed.csv'
-    syn_path = 'tables4comparison/synthetic_data_gaussian_copula_optimized.csv'
+    # syn_path = 'tables4comparison/synthetic_data_GaussianCopulaModel_optimized_fixed.csv'
+    # syn_path = 'tables4comparison/synthetic_data_TVAEModel_optimized_fixed.csv'
+    syn_path = 'tables4comparison/synthetic_data_CTGANModel_optimized_fixed.csv'
     discrete_cols = ...
 
     train_data = pd.read_csv(train_path)

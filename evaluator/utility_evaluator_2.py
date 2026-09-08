@@ -82,8 +82,12 @@ class UtilityEvaluator:
         X_test_real = X_test_real[X_train_real.columns]
         X_train_syn = X_train_syn[X_train_real.columns]
     
-        imputer = SimpleImputer(strategy='mean')
+        imputer = SimpleImputer(strategy='mean', keep_empty_features=True)
+
+        # import ipdb; ipdb.set_trace()
+
         X_train_real = pd.DataFrame(imputer.fit_transform(X_train_real), columns=X_train_real.columns)
+
         X_test_real = pd.DataFrame(imputer.transform(X_test_real), columns=X_test_real.columns)
         X_train_syn = pd.DataFrame(imputer.transform(X_train_syn), columns=X_train_syn.columns)
     
@@ -93,28 +97,41 @@ class UtilityEvaluator:
         X_train_syn_scaled = scaler.transform(X_train_syn)
     
         models = {
-            'RandomForest': RandomForestClassifier(n_estimators=100, random_state=random_state, n_jobs=-1),
-            'GradientBoosting': GradientBoostingClassifier(n_estimators=100, random_state=random_state),
-            'MLP': MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, random_state=random_state)
+            'RandomForest': RandomForestClassifier(n_estimators=100, random_state=random_state, n_jobs=-1, verbose=1),
+            'GradientBoosting': GradientBoostingClassifier(n_estimators=100, random_state=random_state, verbose=1),
+            'MLP': MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, random_state=random_state, verbose=1)
         }
     
         results = {'baseline': {}, 'tstr': {}, 'utility_scores': {}}
         cached_baseline = self._baseline_cache.get(self._baseline_cache_key)
+
+        # full set of target classes across train/test/synthetic (see _preprocess_data);
+        # a model trained on synthetic data can easily miss rare classes, so every AUC call
+        # must be scored against this fixed label set instead of the model's own classes_
+        target_encoder = self.label_encoders.get(self.target_column)
+        if target_encoder is not None:
+            all_classes = np.arange(len(target_encoder.classes_))
+        else:
+            all_classes = np.unique(np.concatenate([y_train_real, y_test_real, y_train_syn]))
+
+        # import ipdb; ipdb.set_trace()
     
         for model_name, model in models.items():
             if cached_baseline is not None and model_name in cached_baseline:
                 baseline_metrics = cached_baseline[model_name]
             else:
                 model_baseline = type(model)(**model.get_params())
+                # model_baseline.fit(X_train_real_scaled, y_train_real)
+                # call `model_baseline.fit()` in a way so its progress  would be visible in stdout
                 model_baseline.fit(X_train_real_scaled, y_train_real)
                 y_pred_baseline = model_baseline.predict(X_test_real_scaled)
-                baseline_metrics = self._compute_metrics(y_test_real, y_pred_baseline, model_baseline, X_test_real_scaled)
+                baseline_metrics = self._compute_metrics(y_test_real, y_pred_baseline, model_baseline, X_test_real_scaled, all_classes)
                 self._baseline_cache.setdefault(self._baseline_cache_key, {})[model_name] = baseline_metrics
         
             model_tstr = type(model)(**model.get_params())
             model_tstr.fit(X_train_syn_scaled, y_train_syn)
             y_pred_tstr = model_tstr.predict(X_test_real_scaled)
-            tstr_metrics = self._compute_metrics(y_test_real, y_pred_tstr, model_tstr, X_test_real_scaled)
+            tstr_metrics = self._compute_metrics(y_test_real, y_pred_tstr, model_tstr, X_test_real_scaled, all_classes)
         
             results['baseline'][model_name] = baseline_metrics
             results['tstr'][model_name] = tstr_metrics
@@ -123,7 +140,7 @@ class UtilityEvaluator:
         results['average_utility_score'] = np.mean(list(results['utility_scores'].values()))
         return results
     
-    def _compute_metrics(self, y_true, y_pred, model, X_test) -> Dict[str, float]:
+    def _compute_metrics(self, y_true, y_pred, model, X_test, all_classes=None) -> Dict[str, float]:
         """Calculates classification metrics with corrected indentation."""
         metrics = {
             'accuracy': accuracy_score(y_true, y_pred),
@@ -131,17 +148,29 @@ class UtilityEvaluator:
             'recall': recall_score(y_true, y_pred, average='weighted', zero_division=0),
             'f1': f1_score(y_true, y_pred, average='weighted', zero_division=0)
         }
-        # Fixed indentation for the try block
-        try:
-            if hasattr(model, 'predict_proba'):
-                y_proba = model.predict_proba(X_test)
-                if len(np.unique(y_true)) == 2:
-                    metrics['auc'] = roc_auc_score(y_true, y_proba[:, 1])
+        if hasattr(model, 'predict_proba'):
+            y_proba = model.predict_proba(X_test)
+            if all_classes is None:
+                all_classes = model.classes_
+            # re-index predict_proba's columns onto the full label set (zero-fill classes
+            # the model never saw during training) so AUC stays computable and meaningful
+            # instead of raising/falling back to 0.0 whenever a class is missing.
+            aligned_proba = np.zeros((y_proba.shape[0], len(all_classes)))
+            class_to_col = {cls: idx for idx, cls in enumerate(all_classes)}
+            for col_idx, cls in enumerate(model.classes_):
+                if cls in class_to_col:
+                    aligned_proba[:, class_to_col[cls]] = y_proba[:, col_idx]
+            try:
+                if len(all_classes) == 2:
+                    metrics['auc'] = roc_auc_score(y_true, aligned_proba[:, 1])
                 else:
-                    metrics['auc'] = roc_auc_score(y_true, y_proba, multi_class='ovr', average='weighted')
-            else:
+                    metrics['auc'] = roc_auc_score(
+                        y_true, aligned_proba, multi_class='ovr', average='weighted', labels=all_classes
+                    )
+            except ValueError as e:
+                print(f"[UtilityEvaluator] Could not compute AUC ({e}); falling back to 0.0.")
                 metrics['auc'] = 0.0
-        except:
+        else:
             metrics['auc'] = 0.0
         return metrics
     

@@ -13,8 +13,6 @@ import inspect
 # from sklearn.impute import MissingIndicator
 
 from data import Data
-
-# 内部导入
 base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, base_dir)
 from evaluator.utility_evaluator_2 import UtilityEvaluator
@@ -31,9 +29,9 @@ class RLOptimizer:
                  discrete_columns: List[str] = None,
                  target_feature: str = 'score-eq5d-5l_start'):
         """
-        初始化 RL 优化器
-        train_path: 80% 训练集
-        val_path: 10% 验证集 (用于计算 RL 奖励)
+        The class describes the behavious of RL-agent that acts as a model h-parameters optimizer
+        train_path: 80% of initial data
+        val_path: 10% of initial data
         """
 
         self.train_data = train_data
@@ -59,9 +57,46 @@ class RLOptimizer:
         self.train_data_transformed = Data(data = self.train_data_transformed, 
                                            metadata = None) # self.train_data.metadata)
 
+        # rewrite values of keys present in both 'self.train_data_transformed.metadata' and 'self.train_data.metadata'
+        # with values in the latter
+        dict_meta_transformed = self.train_data_transformed.metadata.metadata.to_dict()
+        # dict_meta_transformed.update(self.train_data.metadata.metadata.to_dict())
+        dict_meta_src = self.train_data.metadata.metadata.to_dict()
+
+        # update primary keys
+        dict_meta_transformed['primary_key'] = dict_meta_src.get('primary_key', None)
+
+        # for k,v in dict_meta_src['columns'].items():
+        #     if k in dict_meta_transformed['columns'].keys():
+        #         dict_meta_transformed['columns'][k].update(v)
+        #         if 'pii' in dict_meta_transformed['columns'][k].keys():
+        #             if 'pii' in v.keys():
+        #                 dict_meta_transformed['columns'][k]['pii'] = v['pii']
+        #             else:
+        #                 del dict_meta_transformed['columns'][k]['pii']
+
+        for k,v in dict_meta_transformed['columns'].items():
+            if k in dict_meta_src['columns'].keys():
+                dict_meta_transformed['columns'][k].update(dict_meta_src['columns'][k])
+
+            if 'pii' in dict_meta_transformed['columns'][k].keys():
+                if k in dict_meta_src['columns'].keys() and 'pii' in dict_meta_src['columns'][k].keys():
+                    # if 'pii' in dict_meta_src['columns'][k].keys():
+                    dict_meta_transformed['columns'][k]['pii'] = dict_meta_src['columns'][k]['pii']
+                else:
+                    del dict_meta_transformed['columns'][k]['pii']
+
+            # ensure if sdtype is either numerical or categorical
+            if 'sdtype' in dict_meta_transformed['columns'][k].keys():
+                if dict_meta_transformed['columns'][k]['sdtype'] not in ['numerical', 'categorical', 'id']:
+                    dict_meta_transformed['columns'][k]['sdtype'] = 'categorical'
+
+
+        # import ipdb; ipdb.set_trace()
+        self.train_data_transformed.metadata.metadata = self.train_data_transformed.metadata.metadata.load_from_dict(dict_meta_transformed)
+
         self.target_feature = target_feature
 
-        # 定义搜索空间
         self.modelParamSpace = modelParamSpace
         
         # self.action_size = len(self.n_components_options) * len(self.max_iter_options) * len(self.n_init_options)
@@ -88,9 +123,17 @@ class RLOptimizer:
         self.best_score = -np.inf
         self.optimization_history = {'rewards': []}
 
+
     def _detect_discrete_columns(self, df, threshold=20):                                                                     
         """Recognize discrete columns and return a list of their names."""                                                                              
-        return [col for col in df.columns if df[col].dtype == 'object' or df[col].nunique() <= threshold]
+        # return [col for col in df.columns if df[col].dtype == 'object' or df[col].nunique() <= threshold]
+        cols = []
+        for col in df.columns:
+            is_numeric = pd.api.types.is_numeric_dtype(df[col])
+            if not is_numeric and df[col].nunique() <= threshold:
+                cols.append(col)
+        return cols
+    
 
     def _coerce_continuous_numeric(self, df: pd.DataFrame) -> pd.DataFrame:
         """Coerce continuous columns (mixed str/float object dtype, e.g. '65.0') to numeric."""
@@ -116,6 +159,9 @@ class RLOptimizer:
         else:
             model = modelClass(**params)
 
+        # self.train_data_transformed.metadata.metadata.primary_key = ''
+
+        print("** Inside the method `_generate_synthetic_data **`")
         # import ipdb; ipdb.set_trace()
 
         model.fit(self.train_data_transformed)
@@ -145,9 +191,10 @@ class RLOptimizer:
         # 1. Inverse transform numeric features using the scaler step, then drop indicator columns
         scaler = num_transformer.named_steps['scaler']
 
-        # import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
 
         inv_num_full = scaler.inverse_transform(df_samples[num_branch_cols].values)
+
         inv_num = inv_num_full[:, :len(num_cols)]
 
         # 2. Inverse transform categorical features using ordinal step, then drop indicator columns
@@ -206,14 +253,14 @@ class RLOptimizer:
 
 
     def _evaluate_synthetic_data(self, synthetic_data: pd.DataFrame) -> Dict:
-        """核心评估：对比验证集"""
+        """ Evaluatin pipelines """
         # try:
         fid = FidelityEvaluator(self.df_train_model, synthetic_data, self.discrete_cols)
         fid_rep = fid.get_detailed_report()
 
         # import ipdb; ipdb.set_trace()
         
-        # 修正语法错误：去掉参数名前的 self.
+        # Instantiate the utility evaluator class
         util = UtilityEvaluator(
             real_train=self.train_df, 
             real_test=self.val_df, 
@@ -252,21 +299,22 @@ class RLOptimizer:
         return pd.concat([one_per_class, extra]).sample(frac=1, random_state=random_state)
 
     def evaluate_synthetic_data(self, synthetic_data: pd.DataFrame, n_rows: int = 100) -> Dict:
-            """核心评估：对比验证集"""
+            """ Evaluate fidelity and utility of synthetic data """
             # try:
             synthetic_data = self._coerce_continuous_numeric(synthetic_data)
 
             # sumbsample `n_rows` from self.train_df and synthetic_data, they should be the rows from same positions but chosen randomly
             sub_train_data = self._stratified_subsample(self.train_df, n_rows)
-            sub_synthetic_data = synthetic_data.sample(n=min(n_rows, len(synthetic_data)), random_state=42)
+            sub_synthetic_data = synthetic_data.sample(n=min(n_rows, len(synthetic_data)), 
+                                                       random_state=42)
 
             # fid = FidelityEvaluator(self.train_df, synthetic_data, self.discrete_columns)
-            fid = FidelityEvaluator(sub_train_data, sub_synthetic_data, self.discrete_columns)
+            fid = FidelityEvaluator(sub_train_data, sub_synthetic_data, 
+                                    self.discrete_columns)
             fid_rep = fid.get_detailed_report()
     
             # import ipdb; ipdb.set_trace()
             
-            # 修正语法错误：去掉参数名前的 self.
             # util = UtilityEvaluator(
             #     real_train=self.train_df, 
             #     real_test=self.val_df, 
@@ -295,7 +343,7 @@ class RLOptimizer:
 
     def optimize(self, episodes=30, verbose=True, modelClass: type=None):
         self.modelClass = modelClass
-        print("开始基于验证集的 RL 优化...")
+        print(f"Running the optimization for {episodes} episodes ...")
         for ep in range(episodes):
             print(f"Episode {ep+1}/{episodes} - Last Eval: {self.last_eval}")
             state = np.clip([self.last_eval['tvd_score'], self.last_eval['utility_score'], 

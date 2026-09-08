@@ -1,3 +1,7 @@
 .git/
 .pytest_cache/
+.junk/
 __pycache__/
+puf_narrow/
+puf_wide/
+tables4comparison/
