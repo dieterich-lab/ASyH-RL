@@ -17,6 +17,11 @@ from models import CTGANModel
 from data import Data
 
 
+SHARE_TRAIN: float = 0.8
+NUM_EPISODES: int = 40
+DATE: str = '2026Oct06'
+
+
 def invoke_model(MODEL):
     # MODEL = TVAEModel # CopulaGANModel # GaussianCopulaModel
     print("=" * 80)
@@ -45,19 +50,25 @@ def invoke_model(MODEL):
     discrete_columns = list([col for col in df.columns if col not in cont_columns])
     # import ipdb; ipdb.set_trace()
 
-    train_data = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
-    val_data = pd.read_csv(val_data_path, sep=',', on_bad_lines='skip')
+    train_df = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
+    val_df = pd.read_csv(val_data_path, sep=',', on_bad_lines='skip')
 
+    # import ipdb; ipdb.set_trace()
+
+    num_rows_all = int(train_df.shape[0] / SHARE_TRAIN)
+    print(f"Total number of rows expected in a synthesized table is: {num_rows_all}")
+
+    # TODO: REVIEW if we still really need the column "row_id"
     # introduce a new column `row_id`, where each element is a string of format "pXvY", 
     # `X` is the value in `Pat_ID.numeric` on the same row
     #`Y`is the value in `Visite.numeric` on the same row
     new_col_name = 'row_id'
     discrete_columns.append(new_col_name)
-    train_data[new_col_name] = train_data.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
-    val_data[new_col_name] = val_data.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
+    train_df[new_col_name] = train_df.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
+    val_df[new_col_name] = val_df.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
 
-    train_data = Data(train_data)
-    val_data = Data(val_data)
+    train_data = Data(train_df)
+    val_data = Data(val_df)
 
     # assign the column `Pat_ID.numeric` in metadata as a primary key
     train_data.metadata.metadata.primary_key = 'row_id'
@@ -67,6 +78,7 @@ def invoke_model(MODEL):
                                         sdtype='id') # pii=False)
     val_data.metadata.metadata.update_column(column_name='row_id',
                                         sdtype='id') # pii=False)
+    
     # assign the sdtype of the column "ethnicity" as categorical
     train_data.metadata.metadata.update_column(column_name='ethnicity',
                                       sdtype='categorical') # pii=False)
@@ -75,7 +87,8 @@ def invoke_model(MODEL):
     # import ipdb; ipdb.set_trace()
     
 
-    modelParamSpace = {'default_distribution':['gamma', 'norm'], # 'beta'], 
+    # TODO: once the bug is resolved, switch parameter ranges back to original values
+    modelParamSpace = {'default_distribution':['beta', 'norm', 'gamma'], 
                        'enforce_min_max_values':[True,False], 
                        'epochs':[400,500,600], 
                        'verbose':[True],
@@ -102,17 +115,25 @@ def invoke_model(MODEL):
         modelParamSpace=modelParamSpace,
         target_feature = 'score-eq5d-5l' # 'score-eq5d-5l_start'
     )
+
+    # add modelParamSpace to the dictionary `optimizer.optimization_history`
+    optimizer.optimization_history['modelParamSpace'] = modelParamSpace
+    # calculate the product of all value lengths, for each value which is a list or sequence
+    sizeParamSpace = np.prod([len(v) for v in modelParamSpace.values() if isinstance(v, (list, tuple, np.ndarray))])
+    print(f"\n[RL-Asyh] Total number of hyperparameter combinations to explore: {sizeParamSpace}")
+    optimizer.optimization_history['sizeParamSpace'] = str(sizeParamSpace)
     
     # 3. Optimize model h-params with rl-agent
     print("\n[RL-Asyh] running the optimization ...")
-    optimizer.optimize(episodes=30, modelClass=MODEL)
+    # TODO: once the bug is resolved, switch number of episodes back to 30
+    optimizer.optimize(episodes=NUM_EPISODES, modelClass=MODEL)
     
     # 4. Collect the best h-params
     best_params = optimizer.get_best_params()
     print(f"\n Best parameters: {best_params}")
     
-    output_csv = f'synthetic_data_{MODEL.__qualname__}_wide.csv'
-    optimizer.generate_with_best_params(output_csv, n_samples=6900)
+    output_csv = f'synthetic_data_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{DATE}.csv'
+    optimizer.generate_with_best_params(output_csv, n_samples=num_rows_all)
     print(f"✓ The synthesis has been completed: {output_csv}")
 
 
@@ -120,8 +141,7 @@ def main():
     # MODELS = [GaussianCopulaModel, CopulaGANModel, CTGANModel]
     # MODELS = [CTGANModel, GaussianCopulaModel, CopulaGANModel]
     # MODELS = [GaussianCopulaModel, CopulaGANModel]
-    MODELS = [CTGANModel, GaussianCopulaModel, 
-              TVAEModel, CopulaGANModel] # TODO: GaussianMixture, 
+    MODELS = [GaussianCopulaModel, TVAEModel, CTGANModel, CopulaGANModel] # TODO: GaussianMixture, 
 
     for model in MODELS:
         invoke_model(model)

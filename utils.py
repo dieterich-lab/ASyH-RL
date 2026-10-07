@@ -47,15 +47,14 @@ class Utils:
     
     # the method that converts the dates in the dataframe to the number of days since the 1900-01-01
     @staticmethod
-    def convert_dates(data, date_cols) -> pd.DataFrame:
-        df = data.data
+    def convert_dates(df, date_cols) -> pd.DataFrame:
         for col in date_cols:
             # TODO: make sure that replace date is median value of a column
-            replace_date = "1970-01-01"
+            replace_date = "2000-01-01"
             df[col] = pd.to_datetime(df[col])
             # replace nans with default date - 1970-01-01
             df[col].fillna(pd.Timestamp(replace_date), inplace=True)
-            df[col] = (df[col] - pd.Timestamp("1900-01-01")) // pd.Timedelta('1D')
+            df[col] = (df[col] - pd.Timestamp("2000-01-01")) // pd.Timedelta('1D')
             # BREAK:
             # import pudb.remote as remote; remote.set_trace()
         return df
@@ -92,7 +91,7 @@ class Utils:
                 # df[col] = pd.to_datetime(df[col], unit='D', origin='unix')
             
             # Add the base date and convert back to datetime
-            df[col] = pd.to_datetime(pd.to_timedelta(df[col], unit='D') + pd.Timestamp("1900-01-01"))
+            df[col] = pd.to_datetime(pd.to_timedelta(df[col], unit='D') + pd.Timestamp("2000-01-01"))
         return df
     
 

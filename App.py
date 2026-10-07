@@ -216,7 +216,7 @@ class Application:
                             verbose=False)
             return report.get_score()
 
-        self._add_preprocessing(Utils.convert_all_dates, pipelines=pipelines)
+        # self._add_preprocessing(Utils.convert_all_dates, pipelines=pipelines)
         self._add_preprocessing(Utils.impute, pipelines=pipelines)
         # self._add_preprocessing(self._preprocess_impute, pipelines=pipelines)
         print("Added preprocessing hooks")
