@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Main entry point for Cardio-Privacy-GMM optimization.
+Main entry point for generative model optimization.
 Synchronized with 80/10/10 data splitting.
 """
 import os
 import sys
+import argparse
 import pandas as pd
 import numpy as np
 from rl_optimizer import RLOptimizer
 from sklearn.compose import ColumnTransformer
-from sklearn.mixture import GaussianMixture
+from models import GaussianMixtureModel
 from models import GaussianCopulaModel
 from models import CopulaGANModel
 from models import TVAEModel
@@ -18,8 +19,20 @@ from data import Data
 
 
 SHARE_TRAIN: float = 0.8
-NUM_EPISODES: int = 40
-DATE: str = '2026Oct06'
+NUM_EPISODES: int = 50
+POSTFIX: str = 'pcs_score_2026-10-19-1830-long' # add a date here and short label to distinguish the experiment results
+MODELS_AVAIL = [CTGANModel, CopulaGANModel, TVAEModel, GaussianCopulaModel, GaussianMixtureModel]
+
+
+# the function for parsing command-line arguments
+def get_args():
+    # add the argument `--model`, the type - string and it must be an element of `MODELS_AVAIL`
+    parser = argparse.ArgumentParser(description="Run RL-driven hyperparameter optimization for a given model.")
+    # parser.add_argument('--model', type=str, choices=[m.__name__ for m in MODELS_AVAIL], required=True, help="The model to optimize. Must be one of: " + ", ".join([m.__name__ for m in MODELS_AVAIL]))
+    # add the argument `--num-model` the number of used model in a list `MODELS_AVAIL`
+    parser.add_argument('--num-model', type=int, choices=range(len(MODELS_AVAIL)), required=True, dest="model_num",
+                        help="The index of the model to optimize. Must be one of: " + ", ".join([f"{i}: {m.__name__}" for i, m in enumerate(MODELS_AVAIL)]))
+    return parser.parse_args()
 
 
 def invoke_model(MODEL):
@@ -35,7 +48,7 @@ def invoke_model(MODEL):
     if not os.path.exists(train_data_path) or not os.path.exists(val_data_path):
         print("Invalid path to - train.csv or val！")
         sys.exit(1)
-    
+
     # 2. Open the csv table with data for training
     df = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
     # discrete_columns = ['agegroup', 'sex', 'location', 'status', 'SAHfh', 'drink', 'smoke',
@@ -52,9 +65,7 @@ def invoke_model(MODEL):
 
     train_df = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
     val_df = pd.read_csv(val_data_path, sep=',', on_bad_lines='skip')
-
     # import ipdb; ipdb.set_trace()
-
     num_rows_all = int(train_df.shape[0] / SHARE_TRAIN)
     print(f"Total number of rows expected in a synthesized table is: {num_rows_all}")
 
@@ -64,37 +75,50 @@ def invoke_model(MODEL):
     #`Y`is the value in `Visite.numeric` on the same row
     new_col_name = 'row_id'
     discrete_columns.append(new_col_name)
-    train_df[new_col_name] = train_df.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
-    val_df[new_col_name] = val_df.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}", axis=1)
+    train_df[new_col_name] = train_df.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}c{row['Cohort.numeric']}dexam{row['date_exam']}dinfect{row['date_infection']}", axis=1)
+    val_df[new_col_name] = val_df.apply(lambda row: f"p{row['Pat_ID.numeric']}v{row['Visite.numeric']}c{row['Cohort.numeric']}dexam{row['date_exam']}dinfect{row['date_infection']}", axis=1)
+
+    # drop duplicate rows where unique values of `row_id` column are repeated
+    train_df = train_df.drop_duplicates(subset=new_col_name, keep='first')
+    val_df = val_df.drop_duplicates(subset=new_col_name, keep='first')
 
     train_data = Data(train_df)
     val_data = Data(val_df)
 
     # assign the column `Pat_ID.numeric` in metadata as a primary key
-    train_data.metadata.metadata.primary_key = 'row_id'
-    val_data.metadata.metadata.primary_key = 'row_id'
-    # assing the sdtype of the column 'Pad_ID.numeric' as 'id'
-    train_data.metadata.metadata.update_column(column_name='row_id',
-                                        sdtype='id') # pii=False)
-    val_data.metadata.metadata.update_column(column_name='row_id',
-                                        sdtype='id') # pii=False)
+    # train_data.metadata.metadata.primary_key = 'row_id'
+    # val_data.metadata.metadata.primary_key = 'row_id'
+    # # assing the sdtype of the column 'Pad_ID.numeric' as 'id'
+    # train_data.metadata.metadata.update_column(column_name='row_id',
+    #                                     sdtype='id') # pii=False)
+    # val_data.metadata.metadata.update_column(column_name='row_id',
+    #                                     sdtype='id') # pii=False)
     
-    # assign the sdtype of the column "ethnicity" as categorical
-    train_data.metadata.metadata.update_column(column_name='ethnicity',
-                                      sdtype='categorical') # pii=False)
-    val_data.metadata.metadata.update_column(column_name='ethnicity',
-                                          sdtype='categorical') # , pii=False)
+    # # assign the sdtype of the column "ethnicity" as categorical
+    # train_data.metadata.metadata.update_column(column_name='ethnicity',
+    #                                   sdtype='categorical') # pii=False)
+    # val_data.metadata.metadata.update_column(column_name='ethnicity',
+    #                                       sdtype='categorical') # , pii=False)
     # import ipdb; ipdb.set_trace()
     
 
     # TODO: once the bug is resolved, switch parameter ranges back to original values
     modelParamSpace = {'default_distribution':['beta', 'norm', 'gamma'], 
                        'enforce_min_max_values':[True,False], 
-                       'epochs':[400,500,600], 
+                       'epochs':[25, 50, 100], 
                        'verbose':[True],
-                       'n_components':[5, 10, 15],
-                       'n_inits':[1, 3, 5],
-                       'max_iter':[100, 200, 300]}
+                       'n_components':[5, 10],
+                       'n_init':[2, 5],
+                       'max_iter':[50, 100]}
+
+    # define a small modelParamSpace with low number of epochs to make mock testing run faster
+    # modelParamSpace = {'default_distribution':['beta', 'norm'],
+    #                       'enforce_min_max_values':[True,False], 
+    #                       'epochs':[15, 30], 
+    #                       'verbose':[True],
+    #                       'n_components':[5, 10],
+    #                       'n_init':[1, 3],
+    #                       'max_iter':[2, 5]}
 
     # import ipdb; ipdb.set_trace()
 
@@ -113,7 +137,8 @@ def invoke_model(MODEL):
         val_data = val_data, 
         discrete_columns=discrete_columns,
         modelParamSpace=modelParamSpace,
-        target_feature = 'score-eq5d-5l' # 'score-eq5d-5l_start'
+        target_feature = 'pcss' # 'score-eq5d-5l'
+        # target_feature='score-eq5d-5l'
     )
 
     # add modelParamSpace to the dictionary `optimizer.optimization_history`
@@ -126,25 +151,53 @@ def invoke_model(MODEL):
     # 3. Optimize model h-params with rl-agent
     print("\n[RL-Asyh] running the optimization ...")
     # TODO: once the bug is resolved, switch number of episodes back to 30
-    optimizer.optimize(episodes=NUM_EPISODES, modelClass=MODEL)
+    optimizer.optimize(episodes=NUM_EPISODES, modelClass=MODEL, n_rows=500) # TODO: REVIEW, what's an optimal value of the arg. `n_rows`?
     
     # 4. Collect the best h-params
     best_params = optimizer.get_best_params()
     print(f"\n Best parameters: {best_params}")
     
-    output_csv = f'synthetic_data_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{DATE}.csv'
+    output_csv = f'synthetic_data_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{POSTFIX}.csv'
     optimizer.generate_with_best_params(output_csv, n_samples=num_rows_all)
     print(f"✓ The synthesis has been completed: {output_csv}")
 
+    # open the output csv
+    with open(output_csv, 'r') as f:
+        synth_data = pd.read_csv(f, sep=',', on_bad_lines='skip')
+
+    # evaluate quality with sdv built-in methods
+    from sdv.evaluation.single_table import evaluate_quality
+
+    quality_report = evaluate_quality(train_data, synth_data, metadata=train_data.metadata)
+
+    # save it on disk
+    quality_report_path = f'quality_report_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{POSTFIX}.csv'
+    quality_report.to_csv(quality_report_path, index=False)
+
+    # evaluate data fidelity with sdv built-in methods
+
+    from sdv.evaluation.single_table import run_diagnostic
+
+    diagnostic = run_diagnostic(
+        real_data=train_data,
+        synthetic_data=synth_data,
+        metadata=train_data.metadata
+    )
+
+    # save it on disk
+    diagnostic_report_path = f'diagnostic_report_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{POSTFIX}.csv'
+    diagnostic.to_csv(diagnostic_report_path, index=False)
+
+
+
 
 def main():
-    # MODELS = [GaussianCopulaModel, CopulaGANModel, CTGANModel]
-    # MODELS = [CTGANModel, GaussianCopulaModel, CopulaGANModel]
-    # MODELS = [GaussianCopulaModel, CopulaGANModel]
-    MODELS = [GaussianCopulaModel, TVAEModel, CTGANModel, CopulaGANModel] # TODO: GaussianMixture, 
-
-    for model in MODELS:
-        invoke_model(model)
+    # MODELS = [GaussianMixtureModel, GaussianCopulaModel, # TVAEModel, 
+    # MODELS = [CTGANModel, CopulaGANModel, TVAEModel] # TODO: make GaussianMixture work properly!
+    # for model in MODELS:
+    args = get_args()
+    MODEL = MODELS_AVAIL[args.model_num]
+    invoke_model(MODEL)
 
 
 if __name__ == "__main__":

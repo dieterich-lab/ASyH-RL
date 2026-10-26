@@ -19,8 +19,11 @@ from ASyH.utils import Utils
 import time
 import subprocess
 import datetime
-
+import joblib
+import numpy as np
 import pandas as pd
+from sklearn.mixture import GaussianMixture
+
 
 RAND_MAX = 65536
 
@@ -231,6 +234,129 @@ class GaussianCopulaModel(Model):
             return_dict[numerical] = ('', 0.0)
         return_dict['categorical'] = ('', 0.0)
         return return_dict
+
+
+class GaussianMixtureModel(Model):
+    '''
+    The wrapper around GaussianMixture class from Scikit-Learn library
+    to make it able to work in a way similar to other subclasses of Model
+    (like GaussianCopulaModel for example)
+
+    It is fitted on `Data.data`; `Data.metadata` (sdtypes) decides which columns
+    are categorical. Categorical, boolean and non-numeric columns are mapped to
+    integer codes for the mixture and mapped back (snapped to valid categories)
+    after sampling. Constructor kwargs of sklearn's GaussianMixture
+    (n_components, max_iter, n_init, ...) are passed via `override_args`.
+    '''
+
+    class DataFrameGaussianMixture(GaussianMixture):
+        '''sklearn GaussianMixture that keeps column names and samples DataFrames.'''
+
+        def fit(self, X, y=None):
+            self._columns = list(X.columns)
+            return super().fit(X, y)
+
+        def sample(self, n_samples: int = 1) -> pd.DataFrame:
+            # sklearn returns a tuple (X, component_labels); keep only X
+            samples, _ = super().sample(n_samples)
+            return pd.DataFrame(samples, columns=self._columns)
+
+    def __init__(self, data: Optional[Data] = None, override_args=None):
+        Model.__init__(self,
+                       sdv_model_class=self.DataFrameGaussianMixture,
+                       data=data,
+                       override_args=override_args)
+        self._model_type = 'GaussianMixture'
+        self._categories: Dict[str, pd.Index] = {}
+        self._datetime_cols = []
+        self._int_dtypes: Dict[str, Any] = {}
+
+    def adapted_arguments(self, data: Optional[Data] = None) -> Dict[str, Any]:
+        return {}
+
+    @staticmethod
+    def _sdtypes(metadata) -> Dict[str, str]:
+        '''Column -> sdtype from ASyH Metadata, a wrapped/bare SDV metadata, or None.'''
+        inner = getattr(metadata, 'metadata', metadata)
+        if hasattr(inner, 'to_dict'):
+            inner = inner.to_dict()
+        if not isinstance(inner, dict):
+            return {}
+        return {col: spec.get('sdtype') for col, spec in inner.get('columns', {}).items()}
+
+    def _encode(self, data: Data) -> pd.DataFrame:
+        '''Turn Data.data into an all-numeric, NaN-free frame and remember how to undo it.'''
+        df = data.data.copy()
+        sdtypes = self._sdtypes(data.metadata)
+        self._categories, self._datetime_cols, self._int_dtypes = {}, [], {}
+
+        for col in df.columns:
+            s = df[col]
+            if pd.api.types.is_datetime64_any_dtype(s):
+                self._datetime_cols.append(col)
+                s = s.astype('datetime64[ns]')
+                df[col] = s.fillna(s.median()).astype('int64')
+            elif (sdtypes.get(col) in ('categorical', 'boolean')
+                  or not pd.api.types.is_numeric_dtype(s)
+                  or pd.api.types.is_bool_dtype(s)):
+                cats = pd.Index(s.dropna().unique())
+                try:
+                    cats = cats.sort_values()
+                except TypeError:
+                    pass  # mixed types: keep order of appearance
+                codes = cats.get_indexer(s)
+                missing = codes == -1
+                if missing.any():
+                    codes[missing] = pd.Series(codes[~missing]).mode()[0]
+                self._categories[col] = cats
+                df[col] = codes
+            else:
+                if pd.api.types.is_integer_dtype(s):
+                    self._int_dtypes[col] = s.dtype
+                df[col] = s.fillna(s.median())
+        return df
+
+    def _decode(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        for col, cats in self._categories.items():
+            codes = np.clip(np.rint(df[col]), 0, len(cats) - 1).astype(int)
+            df[col] = np.asarray(cats)[codes]
+        for col in self._datetime_cols:
+            df[col] = pd.to_datetime(np.rint(df[col]).astype('int64'))
+        for col, dtype in self._int_dtypes.items():
+            df[col] = np.rint(df[col]).astype(dtype)
+        return df
+
+    def _train(self, data: Optional[Data] = None):
+        data = data if data is not None else self._training_data
+        assert data is not None
+        encoded = Data(self._encode(data), metadata=data.metadata)
+        super()._train(encoded)
+
+    def synthesize(self, sample_size: int = -1, data=None) -> pd.DataFrame:
+        return self._decode(super().synthesize(sample_size=sample_size, data=data))
+
+    def save(self, filename: Optional[str] = None):
+        '''Pickle the fitted sklearn model together with the column codecs.'''
+        if not self._sdv_model:
+            return
+        if not filename:
+            filename = self._model_type + datetime.datetime.now().isoformat(timespec='seconds')
+        if not filename.endswith('.pkl'):
+            filename += '.pkl'
+        joblib.dump({'model': self._sdv_model, 'categories': self._categories,
+                     'datetime_cols': self._datetime_cols, 'int_dtypes': self._int_dtypes,
+                     'input_data_size': self._input_data_size}, filename)
+
+    def read(self, input_filename: str):
+        '''Load a model pickled by save().'''
+        state = joblib.load(input_filename)
+        self._sdv_model = state['model']
+        self._categories = state['categories']
+        self._datetime_cols = state['datetime_cols']
+        self._int_dtypes = state['int_dtypes']
+        self._input_data_size = state['input_data_size']
+        self._trained = True
 
 
 class CPARModel(Model):

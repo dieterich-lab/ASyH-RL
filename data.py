@@ -188,7 +188,9 @@ class Data:
                         date_cols.append(col)
 
         if cat_cols is None:
-            cat_cols = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
+            cat_cols = set(df.select_dtypes(include=['object', 'category', 'bool']).columns)
+            discrete_cols = set(Data.detect_discrete_columns(df))
+            cat_cols = list(cat_cols.union(discrete_cols))
             # remove from cat_cols  elements that are present in either num_cols or date_cols
             for col in cat_cols.copy():
                 if col in num_cols or col in date_cols:
@@ -209,13 +211,15 @@ class Data:
                         date_cols=None,
                         keep_nans=False,
                         inplace=False,
-                        subsample=False):
+                        subsample=False,
+                        min_n_rows: int = 1000,
+                        reuse_preprocessor=None):
         
         # subsample 100 rows from `train_data_transformed` to execute `fit()` faster
         # self.train_data_transformed = self.train_data_transformed.sample(n=min(100, len(self.train_data_transformed)), random_state=42)
         if subsample:
             # df_proc = df_proc.sample(n=min(100, len(df_proc)), random_state=42)
-            df = self.data.sample(n=min(100, len(self.data)), random_state=42)
+            df = self.data.sample(n=min(min_n_rows, len(self.data)), random_state=42)
         else:
             df = self.data.copy()
 
@@ -246,7 +250,12 @@ class Data:
 
         self.original_columns_ = list(df.columns)
 
-        df_proc = self.preprocessor.fit_transform(df)
+        if reuse_preprocessor is not None:
+            # ordinal codes/medians must come from the train fit, otherwise features mean different things across splits
+            self.preprocessor = reuse_preprocessor
+            df_proc = self.preprocessor.transform(df)
+        else:
+            df_proc = self.preprocessor.fit_transform(df)
 
         # TODO: FIX IN THE CODE BELOW HOW COLUMN NAMES ARE ASSIGNED !!
         column_names = self.preprocessor.get_feature_names_out()
@@ -256,7 +265,15 @@ class Data:
 
         # import ipdb; ipdb.set_trace()
         # go through date_cols and convert dates
-        df_proc = Utils.convert_dates(df_proc, date_cols)
+        # first check the intersection between date_cols and df_proc.columns
+        cols_intersection = [col for col in date_cols if col in df_proc.columns]
+        if set(cols_intersection) == set(date_cols):
+            df_proc = Utils.convert_dates(df_proc, date_cols)
+        else:
+            print(f"Warning: Not all date columns are present in df_proc. Missing columns: {set(date_cols) - set(cols_intersection)}")
+            # update date_cols class attribute
+            self.date_cols = cols_intersection
+            df_proc = Utils.convert_dates(df_proc, self.date_cols)
 
         if keep_nans:
             # df_proc = pd.DataFrame(df_proc, columns=self.preprocessor.get_feature_names_out())

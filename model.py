@@ -139,6 +139,7 @@ class Model(ABC):
         if sample_size == -1:
             sample_size = self._input_data_size
         return self.sdv_model.sample(sample_size)
+        # return self.sdv_model.sample(sample_size, output_file_path='disable')
 
 
     # alias function `sample` which is in the fact the same as `synthesize()`

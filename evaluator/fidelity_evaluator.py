@@ -113,6 +113,9 @@ class FidelityEvaluator:
                     pass
         
         # 计算总体得分（越接近0越好）
+        # drop NaN per-column values so one bad column doesn't poison the mean
+        ks_scores = [s for s in ks_scores if not np.isnan(s)]
+        js_scores = [s for s in js_scores if not np.isnan(s)]
         results['overall_ks_score'] = np.mean(ks_scores) if ks_scores else 1.0
         results['overall_js_score'] = np.mean(js_scores) if js_scores else 1.0
         
@@ -212,8 +215,11 @@ class FidelityEvaluator:
         # 只使用连续变量计算相关性
         if len(self.continuous_columns) > 0:
             # try:
-            real_corr = self.real_data[self.continuous_columns].corr()
-            syn_corr = self.synthetic_data[self.continuous_columns].corr()
+            # constant columns have undefined correlation (0/0 -> NaN); treat them as uncorrelated
+            real_corr = self.real_data[self.continuous_columns].corr().fillna(0.0)
+            syn_corr = self.synthetic_data[self.continuous_columns].corr().fillna(0.0)
+            np.fill_diagonal(real_corr.values, 1.0)
+            np.fill_diagonal(syn_corr.values, 1.0)
             
             # Frobenius范数距离
             frobenius_dist = np.linalg.norm(real_corr - syn_corr, 'fro')
@@ -223,9 +229,12 @@ class FidelityEvaluator:
             real_corr_flat = real_corr.values[np.triu_indices_from(real_corr.values, k=1)]
             syn_corr_flat = syn_corr.values[np.triu_indices_from(syn_corr.values, k=1)]
             
-            if len(real_corr_flat) >= 2: # 0:
+            if len(real_corr_flat) >= 2 and real_corr_flat.std() > 0 and syn_corr_flat.std() > 0:
                 corr_corr, _ = stats.pearsonr(real_corr_flat, syn_corr_flat)
                 results['correlation_correlation'] = corr_corr
+            elif len(real_corr_flat) >= 2:
+                # pearsonr is undefined for a constant vector
+                results['correlation_correlation'] = 1.0 if np.allclose(real_corr_flat, syn_corr_flat) else 0.0
             else:
                 results['correlation_correlation'] = 1.0
             
