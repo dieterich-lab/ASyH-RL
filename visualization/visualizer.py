@@ -1,8 +1,3 @@
-"""
-可视化工具
-生成评估结果的各种图表
-"""
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,20 +6,27 @@ from typing import Dict, List
 import warnings
 warnings.filterwarnings('ignore')
 
-# 设置中文字体
+# general plot settings
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 
 class Visualizer:
-    """评估结果可视化器"""
+    """
+    The class with the collection of functions for plotting 
+    essential info about produced data:
+        * a heatmap of features, their pair-wise correlations
+        * distribution curves
+        * radar plots with 5D comprehensive score
+    """
     
     def __init__(self, save_dir: str = 'results'):
         """
-        初始化可视化器
+        The constructor, the main argument is `save_dir` 
+        where results are to be stored
         
         Args:
-            save_dir: 保存图表的目录
+            save_dir: str,  the folder where results will be saved
         """
         self.save_dir = save_dir
         sns.set_style('whitegrid')
@@ -35,13 +37,13 @@ class Visualizer:
                                      columns: List[str] = None,
                                      max_cols: int = 6):
         """
-        绘制单变量分布对比图
+        Make a plot of one-variable distribution
         
         Args:
-            real_data: 真实数据
-            synthetic_data: 合成数据
-            columns: 要绘制的列（None表示所有列）
-            max_cols: 最大绘制列数
+            real_data: pd.DataFrmame, the original dataset
+            synthetic_data: pd.DataFrmame, synth. dataset
+            columns: List, it contains column names which can be characterized by univar. distribution
+            max_cols: int, max number of columns
         """
         if columns is None:
             columns = list(real_data.columns)[:max_cols]
@@ -60,7 +62,7 @@ class Visualizer:
             ax = axes[idx]
             
             try:
-                # 绘制核密度估计图
+                # visualize distr. density of real and synth. data 
                 real_data[col].dropna().plot(kind='density', ax=ax, label='Real', alpha=0.7)
                 synthetic_data[col].dropna().plot(kind='density', ax=ax, label='Synthetic', alpha=0.7)
                 
@@ -68,45 +70,43 @@ class Visualizer:
                 ax.set_xlabel('')
                 ax.legend()
             except:
-                ax.text(0.5, 0.5, f'{col}\n(无法绘制)', 
+                ax.text(0.5, 0.5, f'{col}', 
                        ha='center', va='center', transform=ax.transAxes)
         
-        # 隐藏多余的子图
         for idx in range(len(columns), len(axes)):
             axes[idx].axis('off')
         
         plt.tight_layout()
         plt.savefig(f'{self.save_dir}/univariate_distributions.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"单变量分布图已保存至: {self.save_dir}/univariate_distributions.png")
+        print(f"Saved the figure on the path: {self.save_dir}/univariate_distributions.png")
     
     def plot_correlation_heatmap(self, real_data: pd.DataFrame, 
                                 synthetic_data: pd.DataFrame,
                                 continuous_columns: List[str] = None):
         """
-        绘制相关性热图对比
+        Produce a correlation heatmap
         
         Args:
-            real_data: 真实数据
-            synthetic_data: 合成数据
-            continuous_columns: 连续变量列表
+            real_data: pd.DataFrame
+            synthetic_data: pd.DataFrame
+            continuous_columns: List[str]
         """
         if continuous_columns is None:
             continuous_columns = real_data.select_dtypes(include=[np.number]).columns.tolist()
         
-        # 限制列数以保证可读性
+        # Limit the number of continuous columns for the plot for better readability
         if len(continuous_columns) > 20:
             continuous_columns = continuous_columns[:20]
         
         fig, axes = plt.subplots(1, 2, figsize=(16, 7))
         
-        # 真实数据相关性
         real_corr = real_data[continuous_columns].corr()
         sns.heatmap(real_corr, ax=axes[0], cmap='coolwarm', center=0, 
                    vmin=-1, vmax=1, square=True, cbar_kws={'shrink': 0.8})
         axes[0].set_title('Real Data Correlation', fontsize=14, fontweight='bold')
-        
-        # 合成数据相关性
+
+        # produce the heatmap with seaborn library's method
         syn_corr = synthetic_data[continuous_columns].corr()
         sns.heatmap(syn_corr, ax=axes[1], cmap='coolwarm', center=0,
                    vmin=-1, vmax=1, square=True, cbar_kws={'shrink': 0.8})
@@ -115,14 +115,14 @@ class Visualizer:
         plt.tight_layout()
         plt.savefig(f'{self.save_dir}/correlation_heatmap.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"相关性热图已保存至: {self.save_dir}/correlation_heatmap.png")
+        print(f"The correlation heatmap has been saved to: {self.save_dir}/correlation_heatmap.png")
     
     def plot_tstr_results(self, tstr_results: Dict):
         """
-        绘制TSTR评估结果
+        Demonstrate visually the result of TSTR evaluation
         
         Args:
-            tstr_results: TSTR评估结果字典
+            tstr_results: Dict
         """
         models = list(tstr_results['baseline'].keys())
         metrics = ['accuracy', 'precision', 'recall', 'f1']
@@ -151,14 +151,14 @@ class Visualizer:
         plt.tight_layout()
         plt.savefig(f'{self.save_dir}/tstr_results.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"TSTR结果图已保存至: {self.save_dir}/tstr_results.png")
+        print(f"Saved the visual result of TSTR eval. on the path: {self.save_dir}/tstr_results.png")
     
     def plot_utility_scores(self, tstr_results: Dict):
         """
-        绘制Utility分数条形图
-        
+        The plotting function for visualizing utility scores, the plot is saved on the disk
+
         Args:
-            tstr_results: TSTR评估结果字典
+            tstr_results: Dict,  (with tstr results)
         """
         utility_scores = tstr_results['utility_scores']
         models = list(utility_scores.keys())
@@ -169,7 +169,6 @@ class Visualizer:
         colors = ['#2ecc71' if s >= 0.8 else '#f39c12' if s >= 0.6 else '#e74c3c' for s in scores]
         bars = ax.barh(models, scores, color=colors, alpha=0.8)
         
-        # 添加数值标签
         for i, (bar, score) in enumerate(zip(bars, scores)):
             ax.text(score + 0.02, i, f'{score:.3f}', va='center', fontsize=11)
         
@@ -186,23 +185,24 @@ class Visualizer:
         plt.tight_layout()
         plt.savefig(f'{self.save_dir}/utility_scores.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"Utility分数图已保存至: {self.save_dir}/utility_scores.png")
+        print(f"The figure with utility scores is saved on the path: {self.save_dir}/utility_scores.png")
     
     def plot_rl_training_history(self, training_history: Dict):
         """
-        绘制强化学习训练历史
+        Visualize the history of gained rewards
         
         Args:
-            training_history: 训练历史字典
+            training_history: Dict
         """
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
         
-        # 绘制奖励曲线
+        # get number of episodes and the list of rewards (X and Y axis)
         episodes = training_history['episodes']
         rewards = training_history['rewards']
         
         axes[0].plot(episodes, rewards, alpha=0.6, label='Reward')
-        # 绘制移动平均
+        
+        # smoothen reward values, get the rolling average
         window = min(10, len(rewards) // 10)
         if window > 1:
             rewards_smooth = pd.Series(rewards).rolling(window=window).mean()
@@ -214,7 +214,7 @@ class Visualizer:
         axes[0].legend()
         axes[0].grid(alpha=0.3)
         
-        # 绘制探索率衰减曲线
+        # demonstrate how epsilon exploration rate changed throughout the rl-agent training
         epsilon = training_history['epsilon']
         axes[1].plot(episodes, epsilon, color='orange', linewidth=2)
         axes[1].set_xlabel('Episode', fontsize=11)
@@ -225,19 +225,20 @@ class Visualizer:
         plt.tight_layout()
         plt.savefig(f'{self.save_dir}/rl_training_history.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"RL训练历史图已保存至: {self.save_dir}/rl_training_history.png")
+        print(f"Saved the reward history plot on: {self.save_dir}/rl_training_history.png")
     
-    def plot_comprehensive_scores(self, evaluation_result: Dict):
+    def plot_comprehensive_scores(self, evaluation_result: Dict, 
+                                  plot_name: str = 'comprehensive_scores.png'):
         """
-        绘制综合评估得分雷达图
+        It plots a circular diagram showing scores comprehensively
         
         Args:
-            evaluation_result: 评估结果字典
+            evaluation_result: Dict
         """
         scores = evaluation_result['scores']
         fidelity_details = evaluation_result['fidelity_details']
         
-        # 准备雷达图数据
+        # Main metrics 
         categories = ['Fidelity\n(Overall)', 'Utility\n(TSTR)', 
                      'KS Score', 'JS Score', 'Correlation']
         values = [
@@ -248,9 +249,9 @@ class Visualizer:
             fidelity_details['correlation_similarity']['correlation_correlation']
         ]
         
-        # 创建雷达图
+        # customizing angles on the plot
         angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-        values += values[:1]  # 闭合图形
+        values += values[:1] 
         angles += angles[:1]
         
         fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
@@ -269,60 +270,127 @@ class Visualizer:
                     fontsize=14, fontweight='bold', pad=20)
         
         plt.tight_layout()
-        plt.savefig(f'{self.save_dir}/comprehensive_scores.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'{self.save_dir}/{plot_name}', dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"综合评分雷达图已保存至: {self.save_dir}/comprehensive_scores.png")
-    
+        print(f"The plot is save on the path: {self.save_dir}/{plot_name}")
+
+    def plot_comprehensive_scores_on_ax(self, evaluation_result: Dict, ax=None,
+                                        label: str = 'Scores', color: str = None):
+        """
+        Same radar chart as plot_comprehensive_scores, but drawn on a given
+        polar Axes instead of creating/saving its own figure, so several
+        calls can overlay multiple score profiles on the same plane.
+
+        Args:
+            evaluation_result: assessment results dictionary
+            ax: existing polar-projection Axes to draw on; created if None
+            label: legend label for this series
+            color: line/fill color (None lets matplotlib auto-cycle)
+
+        Returns:
+            The polar Axes used (pass it back in to keep overlaying).
+        """
+        scores = evaluation_result['scores']
+        fidelity_details = evaluation_result['fidelity_details']
+
+        categories = ['Fidelity\n(Overall)', 'Utility\n(TSTR)',
+                     'KS Score', 'JS Score', 'Correlation']
+        values = [
+            scores['fidelity_score'],
+            scores['utility_score'],
+            1.0 - fidelity_details['univariate_distributions']['overall_ks_score'],
+            1.0 - fidelity_details['univariate_distributions']['overall_js_score'],
+            fidelity_details['correlation_similarity']['correlation_correlation']
+        ]
+
+        angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
+        values += values[:1]
+        angles += angles[:1]
+
+        if ax is None:
+            _, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+
+        line, = ax.plot(angles, values, 'o-', linewidth=2, label=label, color=color)
+        ax.fill(angles, values, alpha=0.15, color=line.get_color())
+
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(categories, fontsize=11)
+        ax.set_ylim(0, 1)
+        ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+        ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'], fontsize=9)
+        ax.grid(True, alpha=0.3)
+
+        return ax
+
+    def plot_comprehensive_scores_overlay(self, evaluation_results: Dict[str, Dict],
+                                          plot_name: str = 'comprehensive_scores_overlay.png'):
+        """
+        Overlays several plot_comprehensive_scores_on_ax radar charts on one
+        shared polar Axes, e.g. to compare scores across models/runs.
+
+        Args:
+            evaluation_results: mapping of series label -> evaluation_result dict
+            plot_name: output file name
+        """
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+
+        for label, evaluation_result in evaluation_results.items():
+            self.plot_comprehensive_scores_on_ax(evaluation_result, ax=ax, label=label)
+
+        ax.set_title('Comprehensive Evaluation Scores\n(Closer to edge = Better)',
+                    fontsize=14, fontweight='bold', pad=20)
+        ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
+
+        plt.tight_layout()
+        plt.savefig(f'{self.save_dir}/{plot_name}', dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"The overlay plot is saved on the path: {self.save_dir}/{plot_name}")
+
     def create_summary_report(self, evaluation_result: Dict, 
                             tstr_results: Dict = None):
         """
-        创建文本摘要报告
+        Produce a final summary report based on evaluation results
         
         Args:
-            evaluation_result: 评估结果
-            tstr_results: TSTR结果（可选）
+            evaluation_result: Dict
+            tstr_results: str, the summary with tstr eval. results
         """
         report_lines = []
         report_lines.append("=" * 80)
-        report_lines.append("合成数据质量评估报告")
         report_lines.append("Synthetic Data Quality Evaluation Report")
         report_lines.append("=" * 80)
         report_lines.append("")
         
-        # 基本信息
-        report_lines.append("【评估策略】")
         if evaluation_result['use_rl']:
-            report_lines.append(f"  使用强化学习策略: 动作 {evaluation_result['action']}")
+            report_lines.append(f"Using Reinforcement Learning Strategies: {evaluation_result['action']}")
         else:
-            report_lines.append("  使用默认平衡策略")
+            report_lines.append("Use the default balancing strategy")
         
         weights = evaluation_result['weights']
-        report_lines.append(f"  权重设置: Fidelity={weights['fidelity_weight']:.2f}, "
+        report_lines.append(f"Weight settings: Fidelity={weights['fidelity_weight']:.2f}, "
                           f"Utility={weights['utility_weight']:.2f}")
         report_lines.append("")
         
-        # 核心得分
         scores = evaluation_result['scores']
-        report_lines.append("【核心得分】")
-        report_lines.append(f"  统计相似度 (Fidelity Score):     {scores['fidelity_score']:.4f}")
-        report_lines.append(f"  机器学习有效性 (Utility Score):   {scores['utility_score']:.4f}")
-        report_lines.append(f"  综合得分 (Combined Score):        {scores['combined_score']:.4f}")
+        report_lines.append(f"  Fidelity Score:     {scores['fidelity_score']:.4f}")
+        report_lines.append(f"  Utility Score:   {scores['utility_score']:.4f}")
+        report_lines.append(f"  Combined Score:        {scores['combined_score']:.4f}")
         report_lines.append("")
         
-        # Fidelity详情
+        # Fidelity
         fidelity_details = evaluation_result['fidelity_details']
-        report_lines.append("【统计相似度详情】")
-        report_lines.append(f"  KS统计量均值: {fidelity_details['univariate_distributions']['overall_ks_score']:.4f}")
-        report_lines.append(f"  JS散度均值:   {fidelity_details['univariate_distributions']['overall_js_score']:.4f}")
+        report_lines.append("Statistical Similarity Details")
+        report_lines.append(f"KS-test: {fidelity_details['univariate_distributions']['overall_ks_score']:.4f}")
+        report_lines.append(f"JS-score:   {fidelity_details['univariate_distributions']['overall_js_score']:.4f}")
         corr_sim = fidelity_details['correlation_similarity']
-        report_lines.append(f"  相关性相似度: {corr_sim['correlation_correlation']:.4f}")
-        report_lines.append(f"  Frobenius距离: {corr_sim['frobenius_distance']:.4f}")
+        report_lines.append(f"Correlation Similarity: {corr_sim['correlation_correlation']:.4f}")
+        report_lines.append(f"Frobenius distance: {corr_sim['frobenius_distance']:.4f}")
         report_lines.append("")
         
-        # Utility详情
+        # Utility
         if tstr_results:
-            report_lines.append("【机器学习有效性详情 (TSTR)】")
-            report_lines.append("  模型性能对比 (Synthetic vs Real):")
+            report_lines.append("Details on Machine Learning Effectiveness (TSTR)")
+            report_lines.append("Model Performance Comparison (Synthetic vs Real):")
             
             for model_name in tstr_results['baseline'].keys():
                 baseline_acc = tstr_results['baseline'][model_name]['accuracy']
@@ -330,34 +398,33 @@ class Visualizer:
                 utility_score = tstr_results['utility_scores'][model_name]
                 
                 report_lines.append(f"    {model_name}:")
-                report_lines.append(f"      Baseline准确率: {baseline_acc:.4f}")
-                report_lines.append(f"      TSTR准确率:     {tstr_acc:.4f}")
-                report_lines.append(f"      Utility得分:    {utility_score:.4f}")
+                report_lines.append(f"      Baseline accuracy: {baseline_acc:.4f}")
+                report_lines.append(f"      TSTR Accuracy Rate:     {tstr_acc:.4f}")
+                report_lines.append(f"      Utility Score:    {utility_score:.4f}")
             
-            report_lines.append(f"  平均Utility得分: {tstr_results['average_utility_score']:.4f}")
+            report_lines.append(f"  Utility score: {tstr_results['average_utility_score']:.4f}")
             report_lines.append("")
         
-        # 评估结论
-        report_lines.append("【评估结论】")
+        # conclude the evaluation results
+        report_lines.append("Evaluation Conclusion")
         if scores['combined_score'] >= 0.8:
-            conclusion = "优秀 - 合成数据质量很高"
+            conclusion = "Excellent - The synthetic data is of very high quality"
         elif scores['combined_score'] >= 0.6:
-            conclusion = "良好 - 合成数据质量较好"
+            conclusion = "Good - The synthetic data is of good quality"
         elif scores['combined_score'] >= 0.4:
-            conclusion = "中等 - 合成数据质量一般"
+            conclusion = "Moderate - Synthetic data quality is average"
         else:
-            conclusion = "较差 - 建议改进GAN模型"
+            conclusion = "Poor - Recommendations for Improving the GAN Model"
         
         report_lines.append(f"  {conclusion}")
         report_lines.append("")
         report_lines.append("=" * 80)
         
-        # 保存报告
         report_text = "\n".join(report_lines)
         with open(f'{self.save_dir}/evaluation_report.txt', 'w', encoding='utf-8') as f:
             f.write(report_text)
         
-        print(f"\n评估报告已保存至: {self.save_dir}/evaluation_report.txt")
+        print(f"\nThe evaluation report has been saved to: {self.save_dir}/evaluation_report.txt")
         print("\n" + report_text)
         
         return report_text

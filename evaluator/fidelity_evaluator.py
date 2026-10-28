@@ -1,7 +1,3 @@
-"""
-统计相似度评估器 (Fidelity Evaluator)
-"""
-
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -12,21 +8,24 @@ warnings.filterwarnings('ignore')
 
 
 class FidelityEvaluator:
-    """统计相似度评估器"""
+    """
+    The class with methods for assessing synth. data fidelity.
+    """
     
     def __init__(self, real_data: pd.DataFrame, synthetic_data: pd.DataFrame, 
                  discrete_columns: List[str] = None):
         """
-        初始化评估器
+        The constructor which takes as arguments real_data, synthetic_data,
+        discrete_columns
         """
-        # 确保真实数据和合成数据有相同的列
         common_cols = [col for col in real_data.columns if col in synthetic_data.columns]
         if len(common_cols) == 0:
-            raise ValueError("真实数据和合成数据没有共同的列！")
+            raise ValueError("Zero columns in the table! Please check if it has any content or if you chose a wrong delimiter between fields")
         
         # import ipdb; ipdb.set_trace()
         
-        # 只使用共同的列
+        # assign to class attributes copied sub-frames of real data, 
+        # synth. data, and column lists (columns containing discrete variables or continuous ones)
         self.real_data = real_data[common_cols].copy()
         self.synthetic_data = synthetic_data[common_cols].copy()
         self.discrete_columns = [col for col in (discrete_columns if discrete_columns else []) 
@@ -34,7 +33,7 @@ class FidelityEvaluator:
         self.continuous_columns = [col for col in common_cols 
                                    if col not in self.discrete_columns]
         
-        # 处理连续列中的NaN值（用均值填充）
+        # iterate over continuous columns and fill missing values with medians
         for col in self.continuous_columns:
             if col in self.real_data.columns and self.real_data[col].isnull().any():
                 fill_val = self.real_data[col].median()
@@ -46,7 +45,7 @@ class FidelityEvaluator:
         
     def evaluate_univariate_distributions(self) -> Dict[str, float]:
         """
-        评估单变量分布相似度
+        Carry out evaluation of a one-variable distribution
         """
         results = {
             'ks_statistics': {},
@@ -58,10 +57,11 @@ class FidelityEvaluator:
         ks_scores = []
         js_scores = []
         
-        # 评估连续变量
+        # calculate  Kolmogorov-Smirnov test on  continous features
+        # and find Jensen-Shannon divergence - to characterize distance between synth. and real distributions
         for col in self.continuous_columns:
             if col in self.real_data.columns and col in self.synthetic_data.columns:
-                # KS检验
+                # KS
                 ks_stat, _ = stats.ks_2samp(
                     self.real_data[col], # .fillna(self.real_data[col].median()), 
                     self.synthetic_data[col] # .fillna(self.synthetic_data[col].median())
@@ -69,14 +69,13 @@ class FidelityEvaluator:
                 results['ks_statistics'][col] = ks_stat
                 ks_scores.append(ks_stat)
                 
-                # JS散度（基于直方图）
+                # JS
                 try:
                     real_hist, bins = np.histogram(self.real_data[col], # .fillna(self.real_data[col].median()), 
                                                    bins=50, density=True)
                     syn_hist, _ = np.histogram(self.synthetic_data[col], # .fillna(self.synthetic_data[col].median()), 
                                               bins=bins, density=True)
                     
-                    # 归一化
                     real_hist = real_hist / (real_hist.sum() + 1e-10)
                     syn_hist = syn_hist / (syn_hist.sum() + 1e-10)
                     
@@ -86,33 +85,27 @@ class FidelityEvaluator:
                 except:
                     pass
         
-        # 评估离散变量
         for col in self.discrete_columns:
             if col in self.real_data.columns and col in self.synthetic_data.columns:
                 try:
-                    # 获取类别分布
                     real_counts = self.real_data[col].value_counts(normalize=True)
                     syn_counts = self.synthetic_data[col].value_counts(normalize=True)
                     
-                    # 对齐类别
                     all_categories = set(real_counts.index) | set(syn_counts.index)
                     real_probs = [real_counts.get(cat, 0) for cat in all_categories]
                     syn_probs = [syn_counts.get(cat, 0) for cat in all_categories]
                     
-                    # 归一化
                     real_probs = np.array(real_probs)
                     syn_probs = np.array(syn_probs)
                     real_probs = real_probs / (real_probs.sum() + 1e-10)
                     syn_probs = syn_probs / (syn_probs.sum() + 1e-10)
                     
-                    # JS散度
                     js_div = jensenshannon(real_probs + 1e-10, syn_probs + 1e-10)
                     results['js_divergences'][col] = js_div
                     js_scores.append(js_div)
                 except:
                     pass
         
-        # 计算总体得分（越接近0越好）
         # drop NaN per-column values so one bad column doesn't poison the mean
         ks_scores = [s for s in ks_scores if not np.isnan(s)]
         js_scores = [s for s in js_scores if not np.isnan(s)]
@@ -123,96 +116,92 @@ class FidelityEvaluator:
     
     def evaluate_tvd(self) -> Dict[str, float]:
         """
-        评估总变分距离 (Total Variation Distance, TVD)
+        The method finds the value of Total Variation Distance (TVD)
         
         TVD(P, Q) = 0.5 * sum(|P(x) - Q(x)|)
-        范围: [0, 1]，0表示完全相同，1表示完全不同
+        Values lay in the range [0, 1]
         
         Returns:
-            包含各列的TVD和总体TVD得分的字典
+            results: dict,
+            it has the key `tvd_score` that contains the computed TVD value
         """
         results = {
             'tvd_by_column': {},
             'overall_tvd': 0.0,
-            'tvd_score': 0.0  # 转换为得分 (1 - TVD)
+            'tvd_score': 0.0  # (1 - TVD)
         }
         
         tvd_values = []
         
-        # 评估连续变量
+        # iterate through continuous features
         for col in self.continuous_columns:
             if col in self.real_data.columns and col in self.synthetic_data.columns:
                 try:
-                    # 使用直方图将连续变量离散化
+                    # fill in nans with median values
                     real_values = self.real_data[col].fillna(self.real_data[col].median()).values
                     syn_values = self.synthetic_data[col].fillna(self.synthetic_data[col].median()).values
                     
                     if len(real_values) > 0 and len(syn_values) > 0:
-                        # 确定统一的bins
+                        # find min anx max values
                         min_val = min(real_values.min(), syn_values.min())
                         max_val = max(real_values.max(), syn_values.max())
                         
-                        # 使用50个bins
+                        # prepare bins for the histogram
                         bins = np.linspace(min_val, max_val, 51)
                         
-                        # 计算直方图（概率分布）
+                        # build histograms
                         real_hist, _ = np.histogram(real_values, bins=bins, density=False)
                         syn_hist, _ = np.histogram(syn_values, bins=bins, density=False)
                         
-                        # 归一化为概率分布
+                        # find probabilities
                         real_probs = real_hist / (real_hist.sum() + 1e-10)
                         syn_probs = syn_hist / (syn_hist.sum() + 1e-10)
                         
-                        # 计算TVD: 0.5 * sum(|P(x) - Q(x)|)
+                        # TVD: 0.5 * sum(|P(x) - Q(x)|)
                         tvd = 0.5 * np.sum(np.abs(real_probs - syn_probs))
                         
                         results['tvd_by_column'][col] = tvd
                         tvd_values.append(tvd)
                 except Exception as e:
-                    # 如果计算失败，跳过该列
                     pass
         
-        # 评估离散变量
+        # iterate through discrete columns
         for col in self.discrete_columns:
             if col in self.real_data.columns and col in self.synthetic_data.columns:
                 try:
-                    # 获取类别分布
+                    # find unique values countrs in real and synth. discrete features
                     real_counts = self.real_data[col].value_counts(normalize=True)
                     syn_counts = self.synthetic_data[col].value_counts(normalize=True)
                     
-                    # 对齐类别
+                    # find probabilities (for each unique value)
                     all_categories = set(real_counts.index) | set(syn_counts.index)
                     real_probs = np.array([real_counts.get(cat, 0) for cat in all_categories])
                     syn_probs = np.array([syn_counts.get(cat, 0) for cat in all_categories])
                     
-                    # 归一化
+                    # normalize probab-s
                     real_probs = real_probs / (real_probs.sum() + 1e-10)
                     syn_probs = syn_probs / (syn_probs.sum() + 1e-10)
                     
-                    # 计算TVD
                     tvd = 0.5 * np.sum(np.abs(real_probs - syn_probs))
                     
                     results['tvd_by_column'][col] = tvd
                     tvd_values.append(tvd)
                 except Exception as e:
-                    # 如果计算失败，跳过该列
                     pass
         
-        # 计算总体TVD
         results['overall_tvd'] = np.mean(tvd_values) if tvd_values else 1.0
         
-        # 转换为得分 (1 - TVD)，得分越高越好
         results['tvd_score'] = 1.0 - results['overall_tvd']
         
         return results
     
     def evaluate_correlation_similarity(self) -> Dict[str, float]:
         """
-        评估相关性矩阵相似度
+        Assess the similarity between datasets by means of calculating their correlation (Pearson's corr.)
         """
         results = {}
         
-        # 只使用连续变量计算相关性
+        # missing values are filled with zeros
         if len(self.continuous_columns) > 0:
             # try:
             # constant columns have undefined correlation (0/0 -> NaN); treat them as uncorrelated
@@ -221,11 +210,11 @@ class FidelityEvaluator:
             np.fill_diagonal(real_corr.values, 1.0)
             np.fill_diagonal(syn_corr.values, 1.0)
             
-            # Frobenius范数距离
+            # Frobenius distance
             frobenius_dist = np.linalg.norm(real_corr - syn_corr, 'fro')
             results['frobenius_distance'] = frobenius_dist
             
-            # 相关系数矩阵的相关性
+            # flattening
             real_corr_flat = real_corr.values[np.triu_indices_from(real_corr.values, k=1)]
             syn_corr_flat = syn_corr.values[np.triu_indices_from(syn_corr.values, k=1)]
             
@@ -238,16 +227,10 @@ class FidelityEvaluator:
             else:
                 results['correlation_correlation'] = 1.0
             
-            # 平均绝对误差
+            # find the corr. between MAEs (moving averages)
             mae = np.mean(np.abs(real_corr - syn_corr))
             results['correlation_mae'] = mae
                 
-            # except Exception as e:
-            #     # import ipdb; ipdb.set_trace()
-            #     print(f"相关性评估出错: {e}")
-            #     results['frobenius_distance'] = 0.0
-            #     results['correlation_correlation'] = 1.0
-            #     results['correlation_mae'] = 0.0
         else:
             results['frobenius_distance'] = 0.0
             results['correlation_correlation'] = 1.0
@@ -257,26 +240,22 @@ class FidelityEvaluator:
     
     def compute_fidelity_score(self) -> float:
         """
-        计算综合统计相似度得分 
+        With this method we find a fidelity score - the weighed average
+        of: KS-score, JS-score, correlation, and TVD
         """
-        # 获取各项指标
         univariate_results = self.evaluate_univariate_distributions()
         correlation_results = self.evaluate_correlation_similarity()
         tvd_results = self.evaluate_tvd()
         
-        # KS统计量转换为得分（1 - KS）
         ks_score = 1.0 - univariate_results['overall_ks_score']
         
-        # JS散度转换为得分（1 - JS）
         js_score = 1.0 - univariate_results['overall_js_score']
         
-        # 相关性得分
         corr_score = correlation_results['correlation_correlation']
         
-        # TVD得分（已经转换为得分形式）
+        # TVD
         tvd_score = tvd_results['tvd_score']
         
-        # 加权平均（包含TVD）
         weights = [0.3, 0.3, 0.2, 0.2]  # KS, JS, Correlation, TVD
         fidelity_score = (weights[0] * ks_score + 
                          weights[1] * js_score + 
@@ -287,10 +266,10 @@ class FidelityEvaluator:
     
     def get_detailed_report(self) -> Dict:
         """
-        获取详细评估报告
-        
         Returns:
-            详细评估结果字典
+            Dict
+            that contains several keys, including fidelity score,
+            correlation similiarity, and tvd score
         """
         univariate_results = self.evaluate_univariate_distributions()
         correlation_results = self.evaluate_correlation_similarity()
@@ -302,6 +281,6 @@ class FidelityEvaluator:
             'univariate_distributions': univariate_results,
             'correlation_similarity': correlation_results,
             'tvd_results': tvd_results,
-            'tvd_score': tvd_results['tvd_score']  # 方便访问
+            'tvd_score': tvd_results['tvd_score']
         }
 

@@ -1,15 +1,10 @@
-"""
-Q-Learning 代理
-用于学习最优的评估策略
-"""
-
 import numpy as np
 import pickle
 from typing import Tuple, List, Dict
 
 
 class QLearningAgent:
-    """Q-Learning 强化学习代理"""
+    """Q-Learning agent module"""
     
     def __init__(self, state_size: int, action_size: int, 
                  learning_rate: float = 0.1, 
@@ -19,16 +14,16 @@ class QLearningAgent:
                 #  epsilon_min: float = 0.01
                 ):
         """
-        初始化Q-Learning代理
+        The constructor of the Q-Learning agent
         
         Args:
-            state_size: 状态空间大小
-            action_size: 动作空间大小
-            learning_rate: 学习率
-            discount_factor: 折扣因子
-            epsilon: 探索率
-            epsilon_decay: 探索率衰减
-            epsilon_min: 最小探索率
+            state_size: minimal number of var-s needed to describe a current state
+            action_size: how many different action options exist at the moment
+            learning_rate: it decided how much will the agent update its q-table after each iteration
+            discount_factor: the discount on future rewards
+            epsilon: the parameter which dictates if the agent will favor explorative or exploitative policy
+            epsilon_decay: how much will epsilon reduce after each iteration of the agent?
+            epsilon_min: the minimal possible epsilon
         """
         self.state_size = state_size
         self.action_size = action_size
@@ -40,7 +35,6 @@ class QLearningAgent:
         
         self.q_table = {}
         
-        # 训练历史
         self.training_history = {
             'episodes': [],
             'rewards': [],
@@ -49,32 +43,32 @@ class QLearningAgent:
     
     def _discretize_state(self, state: np.ndarray, bins: int = 10) -> Tuple:
         """
-        将连续状态离散化
+        Break continuous variables that characterize a state into 
+        discrete ones
         
         Args:
-            state: 连续状态
-            bins: 离散化的箱数
+            state: np.ndarray, the state of agent's environment at the moment,
+            bins: int, histogram bins
             
         Returns:
-            离散化后的状态元组
+            A tuple of discretize states
         """
         discretized = []
         for value in state:
-            # 将值映射到[0, bins-1]的整数
             discretized_value = int(min(bins - 1, max(0, value * bins)))
             discretized.append(discretized_value)
         return tuple(discretized)
     
     def get_q_value(self, state: Tuple, action: int) -> float:
         """
-        获取Q值
+        Pull a Q-value from the Q-table based on taken action and curr. state
         
         Args:
-            state: 状态
-            action: 动作
+            state: Tuple
+            action: int
             
         Returns:
-            Q值
+            Q: float
         """
         if (state, action) not in self.q_table:
             self.q_table[(state, action)] = 0.0
@@ -82,65 +76,56 @@ class QLearningAgent:
     
     def choose_action(self, state: np.ndarray, training: bool = True) -> int:
         """
-        选择动作（ε-greedy策略）
+        The function decides on a next action （following ε-greedy strategy）
         
         Args:
-            state: 当前状态
-            training: 是否为训练模式
+            state: np.ndarray, the current state of an environment,
+            training: bool,  if an agent is in training mode
             
         Returns:
-            选择的动作
+            action: integer
         """
         state_discrete = self._discretize_state(state)
         
-        # ε-greedy策略
+        # ε-greedy strategy
         if training and np.random.random() < self.epsilon:
-            # 探索：随机选择动作
+            # take an explorative step
             return np.random.randint(0, self.action_size)
         else:
-            # 利用：选择Q值最大的动作
+            # exploitative step,  choose a best action using the q-table
             q_values = [self.get_q_value(state_discrete, a) for a in range(self.action_size)]
             return int(np.argmax(q_values))
     
     def update(self, state: np.ndarray, action: int, reward: float, 
                next_state: np.ndarray, done: bool):
         """
-        更新Q表
         
         Args:
-            state: 当前状态
-            action: 执行的动作
-            reward: 获得的奖励
-            next_state: 下一个状态
-            done: 是否结束
+            state: np.ndarray,
+            action: int,  an index of a taken action (among available actions)
+            reward: float, 
+            next_state: np.ndarray,
+            done: bool,  if the feedback is complete
         """
         state_discrete = self._discretize_state(state)
         next_state_discrete = self._discretize_state(next_state)
         
-        # 当前Q值
+        # update the Q-value
         current_q = self.get_q_value(state_discrete, action)
         
-        # 计算目标Q值
         if done:
             target_q = reward
         else:
-            # 下一状态的最大Q值
             next_q_values = [self.get_q_value(next_state_discrete, a) 
                            for a in range(self.action_size)]
             max_next_q = max(next_q_values)
             target_q = reward + self.discount_factor * max_next_q
         
-        # 更新Q值
         new_q = current_q + self.learning_rate * (target_q - current_q)
         self.q_table[(state_discrete, action)] = new_q
-    
-    # def decay_epsilon(self):
-    #     """衰减探索率"""
-    #     if self.epsilon > self.epsilon_min:
-    #         self.epsilon *= self.epsilon_decay
-    
+
     def save(self, filepath: str):
-        """保存模型"""
+        """Save the model data and dump on a disk as pickle file"""
         model_data = {
             'q_table': self.q_table,
             'epsilon': self.epsilon,
@@ -152,7 +137,7 @@ class QLearningAgent:
             pickle.dump(model_data, f)
     
     def load(self, filepath: str):
-        """加载模型"""
+        """Load an agent model data from a saved pickle"""
         with open(filepath, 'rb') as f:
             model_data = pickle.load(f)
         
@@ -161,4 +146,3 @@ class QLearningAgent:
         self.training_history = model_data['training_history']
         self.state_size = model_data['state_size']
         self.action_size = model_data['action_size']
-

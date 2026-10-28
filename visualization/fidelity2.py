@@ -19,13 +19,13 @@ def convert_comma_decimal(val):
 
 def plot_pathological_distributions_fixed(real_path = 'train.csv', syn_path = 'synthetic_data_gmm_optimized.csv'):
     print("="*60)
-    print("ÕýÔÚ»æÖÆµ¥±äÁ¿·Ö²¼Í¼ (ÐÞ¸´°æ)")
-    print("Ä¿±ê: ½â¾öÖÐÎÄÁÐÃû 'ÀàÐÍ' µ¼ÖÂµÄ KeyError")
+    print("ï¿½ï¿½ï¿½Ú»ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö²ï¿½Í¼ (ï¿½Þ¸ï¿½ï¿½ï¿½)")
+    print("Ä¿ï¿½ï¿½: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿? 'ï¿½ï¿½ï¿½ï¿½' ï¿½ï¿½ï¿½Âµï¿½ KeyError")
     print("="*60)
     
-    # --- 1. Â³°ôµÄÊý¾Ý¼ÓÔØº¯Êý ---
+    # --- 1. Â³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý¼ï¿½ï¿½Øºï¿½ï¿½ï¿½ ---
     def robust_load(path, sep=','):
-        # ÓÅÏÈ³¢ÊÔ utf-8-sig (ºÏ³ÉÊý¾ÝÍ¨³£ÓÃÕâ¸ö)
+        # ï¿½ï¿½ï¿½È³ï¿½ï¿½ï¿½ utf-8-sig (ï¿½Ï³ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿?)
         encodings = ['utf-8-sig', 'utf-8', 'gbk', 'gb18030']
         for enc in encodings:
             try:
@@ -33,37 +33,37 @@ def plot_pathological_distributions_fixed(real_path = 'train.csv', syn_path = 's
                 return df
             except UnicodeDecodeError:
                 continue
-        raise ValueError(f"ÎÞ·¨¶ÁÈ¡ÎÄ¼þ {path}£¬Çë¼ì²é±àÂë")
+        raise ValueError(f"ï¿½Þ·ï¿½ï¿½ï¿½È¡ï¿½Ä¼ï¿½ {path}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿?")
 
     try:
-        print(f"¶ÁÈ¡ÕæÊµÊý¾Ý: {real_path}")
+        print(f"ï¿½ï¿½È¡ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½: {real_path}")
         real = robust_load(real_path)
-        print(f"¶ÁÈ¡ºÏ³ÉÊý¾Ý: {syn_path}")
+        print(f"ï¿½ï¿½È¡ï¿½Ï³ï¿½ï¿½ï¿½ï¿½ï¿½: {syn_path}")
         syn = robust_load(syn_path)
         if len(syn.columns) != len(real.columns):
-            print(f"[¾¯¸æ] ºÏ³ÉÊý¾ÝÁÐÊý ({len(syn.columns)}) ÓëÕæÊµÊý¾ÝÁÐÊý ({len(real.columns)}) ²»Ò»ÖÂ¡£Çë¼ì²éÊý¾Ý¡£")
-            # ³¢ÊÔÊ¹ÓÃ·Ö¸ô·û ';'
+            print(f"[ï¿½ï¿½ï¿½ï¿½] ï¿½Ï³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ({len(syn.columns)}) ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ({len(real.columns)}) ï¿½ï¿½Ò»ï¿½Â¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý¡ï¿½")
+            # ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ã·Ö¸ï¿½ï¿½ï¿½ ';'
             try:
                 syn = robust_load(syn_path, sep=';')
             except:
-                print("[´íÎó] Ê¹ÓÃ·Ö¸ô·û ';' ÈÔÎÞ·¨¶ÁÈ¡ºÏ³ÉÊý¾Ý£¬Çë¼ì²éÎÄ¼þ¸ñÊ½¡£")
+                print("[ï¿½ï¿½ï¿½ï¿½] Ê¹ï¿½Ã·Ö¸ï¿½ï¿½ï¿½ ';' ï¿½ï¿½ï¿½Þ·ï¿½ï¿½ï¿½È¡ï¿½Ï³ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½Ê½ï¿½ï¿½")
                 return
 
         real = real.applymap(convert_comma_decimal)
         syn = syn.applymap(convert_comma_decimal)
         
-        # --- 2. ÖÇÄÜÉ¸Ñ¡ÁÐ (¹Ø¼üÐÞ¸´) ---
-        # È·±£Ö»»­Á½¸öÎÄ¼þÀï¶¼ÓÐµÄÁÐ
+        # --- 2. ï¿½ï¿½ï¿½ï¿½É¸Ñ¡ï¿½ï¿½ (ï¿½Ø¼ï¿½ï¿½Þ¸ï¿½) ---
+        # È·ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¶¼ï¿½Ðµï¿½ï¿½ï¿½
         common_cols = set(real.columns) & set(syn.columns)
-        print(f"¹«¹²ÁÐÊýÁ¿: {len(common_cols)}")
+        print(f"ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: {len(common_cols)}")
         
-        if 'ÀàÐÍ' not in common_cols:
-            print("[¾¯¸æ] 'ÀàÐÍ' ÁÐÎ´ÔÚºÏ³ÉÊý¾ÝÖÐÕÒµ½¡£¿ÉÄÜÊÇ±àÂëÎÊÌâµ¼ÖÂÁÐÃûÂÒÂë¡£")
-            print("ºÏ³ÉÊý¾ÝÁÐÃûÊ¾Àý:", list(syn.columns)[:5])
-            # ³¢ÊÔ×Ô¶¯ÐÞ¸´£ºÈç¹ûÁÐÊýÒ»ÖÂ£¬Ç¿ÐÐ¶ÔÆëÁÐÃû£¨¿ÉÑ¡£©
+        if 'ï¿½ï¿½ï¿½ï¿½' not in common_cols:
+            print("[ï¿½ï¿½ï¿½ï¿½] 'ï¿½ï¿½ï¿½ï¿½' ï¿½ï¿½Î´ï¿½ÚºÏ³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½âµ¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ë¡£")
+            print("ï¿½Ï³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½:", list(syn.columns)[:5])
+            # ï¿½ï¿½ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½Þ¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½Â£ï¿½Ç¿ï¿½Ð¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿?
             # syn.columns = real.columns 
         
-        # --- 3. Ñ¡Ôñ²¡ÀíÖ¸±ê (Continuous) ---
+        # --- 3. Ñ¡ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ (Continuous) ---
         priority_keywords = [
             'QAWSS', 'WSS', 'OSI', 'RRT', 'Pressure', 'G', 'GON'
         ]
@@ -79,15 +79,15 @@ def plot_pathological_distributions_fixed(real_path = 'train.csv', syn_path = 's
                     if len(selected_cont_vars) >= 3: break
             if len(selected_cont_vars) >= 3: break
             
-        # ²¹Î»
+        # ï¿½ï¿½Î»
         if len(selected_cont_vars) < 3:
-            remaining = [c for c in available_nums if c not in selected_cont_vars and c not in ['ÐòºÅ', 'ID']]
+            remaining = [c for c in available_nums if c not in selected_cont_vars and c not in ['ï¿½ï¿½ï¿?', 'ID']]
             selected_cont_vars.extend(remaining[:3-len(selected_cont_vars)])
             
-        print(f"Ñ¡¶¨Á¬ÐøÖ¸±ê: {selected_cont_vars}")
+        print(f"Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½: {selected_cont_vars}")
 
-        # --- 4. Ñ¡ÔñÀëÉ¢Ö¸±ê (Categorical) ---
-        # Ö»´Ó common_cols ÀïÑ¡£¬·ÀÖ¹ KeyError
+        # --- 4. Ñ¡ï¿½ï¿½ï¿½ï¿½É¢Ö¸ï¿½ï¿½ (Categorical) ---
+        # Ö»ï¿½ï¿½ common_cols ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½Ö¹ KeyError
         target_cat_vars = [ 'status','sex', 'status', 'location', 'HBP']
         selected_cat_vars = [c for c in target_cat_vars if c in common_cols][:3]
         
@@ -95,9 +95,9 @@ def plot_pathological_distributions_fixed(real_path = 'train.csv', syn_path = 's
              all_cats = [c for c in real.select_dtypes(exclude=[np.number]).columns if c in common_cols]
              selected_cat_vars.extend([c for c in all_cats if c not in selected_cat_vars][:3-len(selected_cat_vars)])
 
-        print(f"Ñ¡¶¨ÀëÉ¢Ö¸±ê: {selected_cat_vars}")
+        print(f"Ñ¡ï¿½ï¿½ï¿½ï¿½É¢Ö¸ï¿½ï¿½: {selected_cat_vars}")
 
-        # --- 5. »æÍ¼ ---
+        # --- 5. ï¿½ï¿½Í¼ ---
         fig, axes = plt.subplots(2, 3, figsize=(18, 10))
         plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial', 'DejaVu Sans']
         plt.rcParams['axes.unicode_minus'] = False
@@ -105,7 +105,7 @@ def plot_pathological_distributions_fixed(real_path = 'train.csv', syn_path = 's
         color_real = '#1f77b4'
         color_syn = '#d62728'
         
-        # µÚÒ»ÐÐ£ºÁ¬Ðø
+        # ï¿½ï¿½Ò»ï¿½Ð£ï¿½ï¿½ï¿½ï¿½ï¿½
         for i, col in enumerate(selected_cont_vars):
             if i >= 3: break
             ax = axes[0, i]
@@ -115,7 +115,7 @@ def plot_pathological_distributions_fixed(real_path = 'train.csv', syn_path = 's
             ax.set_ylabel('Density' if i==0 else '')
             if i==0: ax.legend()
 
-        # µÚ¶þÐÐ£ºÀëÉ¢
+        # ï¿½Ú¶ï¿½ï¿½Ð£ï¿½ï¿½ï¿½É¢
         for i, col in enumerate(selected_cat_vars):
             if i >= 3: break
             ax = axes[1, i]
@@ -136,19 +136,21 @@ def plot_pathological_distributions_fixed(real_path = 'train.csv', syn_path = 's
             ax.set_ylabel('Proportion' if i==0 else '')
             ax.get_legend().remove()
 
-        # ×ÜÍ¼Àý
+        # ï¿½ï¿½Í¼ï¿½ï¿½
         handles, labels = axes[0, 0].get_legend_handles_labels()
         fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=2)
         
         plt.tight_layout()
         output_file = 'Figure_Pathology_Distributions_Fixed.png'
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"\n[³É¹¦] Í¼Æ¬ÒÑ±£´æÎª: {output_file}")
+        print(f"\n[ï¿½É¹ï¿½] Í¼Æ¬ï¿½Ñ±ï¿½ï¿½ï¿½Îª: {output_file}")
 
     except Exception as e:
-        print(f"[´íÎó] {e}")
+        print(f"[ï¿½ï¿½ï¿½ï¿½] {e}")
         import traceback
         traceback.print_exc()
 
 if __name__ == "__main__":
-    plot_pathological_distributions_fixed(real_path='puf_narrow/train.csv', syn_path='tables4comparison/synthetic_data_gmm_optimized_fixed.csv')
+    # plot_pathological_distributions_fixed(real_path='puf_narrow/train.csv', syn_path='tables4comparison/synthetic_data_gmm_optimized_fixed.csv')
+    plot_pathological_distributions_fixed(real_path='puf_wide/uf_wide_plus_target_numerics.csv', 
+                                          syn_path='tables4comparison/synthetic_data_gmm_wide_full.csv')

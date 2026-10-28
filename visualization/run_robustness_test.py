@@ -3,35 +3,42 @@ import os
 import numpy as np
 import pandas as pd
 from scipy.stats import wilcoxon
-from evaluator.independent_evaluator import IndependentEvaluator
+from evaluator.independent_evaluator import IndependentEvaluator, CombinedConfig
 
-class Config:
-    def __init__(self):
-        self.target_column = "status"  
-        self.discrete_columns = [
-            'agegroup', 'sex', 'location', 'status', 'SAHfh', 'drink', 'smoke',
-            'HBP', 'DM', 'IS', 'CAD', 'number', 'shape1', 'maxgroup', 'shape2'
-        ]
 
 def run_experiment_10_times():
     print("="*60)
     print(" 10-times Robustness Test with Different Seeds ")
     print("="*60)
 
-    cfg = Config()
-    train_path = 'train.csv'
-    test_path = 'test.csv'
+    train_path = 'puf_wide/train.csv'
+    test_path = 'puf_wide/test.csv'
     
     models = {
-        "CLEO (Ours)": "synthetic_data_gmm_optimized.csv",
-        "TVAE": "synthetic_data_tvae.csv",
-        "CTGAN": "synthetic_data_gan.csv"
+        "GMM": "tables4comparison/synthetic_data_gmm_wide_full.csv",
+        "Gaussian Copula": "tables4comparison/synthetic_data_GaussianCopulaModel_wide_rl_40ep.csv",
+        "TVAE": "tables4comparison/synthetic_data_TVAEModel_wide_rl_40ep.csv",
+        "CTGAN": "tables4comparison/synthetic_data_CTGANModel_wide_rl_40ep.csv"
     }
 
-    # Ô¤Éè10¸ö²»Í¬µÄËæ»úÖÖ×ÓÒÔ²úÉú²¨¶¯
+    # Ô¤ï¿½ï¿½10ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     seeds = [42, 123, 2026, 777, 888, 10, 99, 1024, 5, 2025]
     metrics_to_collect = ['accuracy', 'precision', 'recall', 'f1', 'auc']
     final_results = {}
+
+    CombinedConfig.seeds = seeds
+    CombinedConfig.discrete_columns = ['date_infection_exact', 'gender', 'ethnicity', 'gecco_537', 
+                                       'gecco_552', 'gecco_550', 'gecco_551', 
+                                       'gecco_538', 'gecco_553', 'gecco_665', 'gecco_658', 
+                                       'gecco_655', 'gecco_522', 'gecco_524', 'gecco_656', 
+                                       'gecco_533', 'gecco_534', 'gecco_535', 'gecco_536', 
+                                       'gecco_528', 'gecco_529_a', 'gecco_529_b', 'gecco_530', 
+                                       'gecco_664', 'gecco_539', 'gecco_540', 
+                                       'gecco_541', 'gecco_542', 'gecco_543', 'gecco_544', 
+                                       'gecco_545', 'gecco_546', 'gecco_547', 
+                                       'gecco_548', 'score-eq5d-5l', 'Cohort.numeric']
+    CombinedConfig.target_column = "score-eq5d-5l"
+    cfg = CombinedConfig
 
     for name, path in models.items():
         if not os.path.exists(path):
@@ -41,22 +48,12 @@ def run_experiment_10_times():
         print(f"\n Evaluating {name} ...")
         run_scores = {m: [] for m in metrics_to_collect}
         
-        for i in range(10):
-            current_seed = seeds[i]
-            # ´«ÈëËæ»úÖÖ×ÓÈ·±£Ã¿´ÎÑµÁ·µÄËæ»úÐÔ
-            evaluator = IndependentEvaluator(train_path, test_path, path, cfg, seed=current_seed)
-            res = evaluator.evaluate()
+        evaluator = IndependentEvaluator(train_path, test_path, path, cfg)
+        res = evaluator.evaluate()
             
-            # ¼ÇÂ¼Ëæ»úÉ­ÁÖµÄÖ¸±ê
-            rf_metrics = res['utility']['utility_scores']['RF']
-            for m in metrics_to_collect:
-                run_scores[m].append(rf_metrics[m])
-            
-            print(f"  Run {i+1}/10 (Seed {current_seed}) - F1: {rf_metrics['f1']:.4f}")
-
         final_results[name] = run_scores
 
-    # --- ´òÓ¡Í³¼Æ½á¹û (Ê¹ÓÃ +/- Ìæ´úÌØÊâ·ûºÅÒÔ·À±¨´í) ---
+    # --- ï¿½ï¿½Ó¡Í³ï¿½Æ½ï¿½ï¿½ (Ê¹ï¿½ï¿½ +/- ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô·ï¿½ï¿½ï¿½ï¿½ï¿½) ---
     print("\n" + "="*20 + " Final Results (Mean +/- SD) " + "="*20)
     report_rows = []
     for name, scores in final_results.items():
@@ -70,13 +67,13 @@ def run_experiment_10_times():
     df_report = pd.DataFrame(report_rows)
     print(df_report.to_string(index=False))
 
-    # --- ÏÔÖøÐÔ¼ìÑé ---
-    if "CLEO (Ours)" in final_results and "TVAE" in final_results:
-        f1_cleo = final_results["CLEO (Ours)"]["f1"]
-        f1_tvae = final_results["TVAE"]["f1"]
+    # --- ï¿½ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ ---
+    if "GMM" in final_results and "Gaussian Copula" in final_results:
+        f1_cleo = final_results["GMM"]["f1"]
+        f1_tvae = final_results["Gaussian Copula"]["f1"]
         try:
             stat, p = wilcoxon(f1_cleo, f1_tvae)
-            print(f"\nWilcoxon Test (F1): CLEO vs TVAE, p-value = {p:.5f}")
+            print(f"\nWilcoxon Test (F1): GMM vs TVAE, p-value = {p:.5f}")
             if p < 0.05: print(" Significant Difference (*)")
         except Exception as e:
             print(f"\nWilcoxon Test skipped: {e}")

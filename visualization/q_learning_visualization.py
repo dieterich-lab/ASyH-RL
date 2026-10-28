@@ -3,13 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # 1. Hyperparameters
-STATES = 20          # 1D world size
+STATES = 6          # 1D world size
 GOAL_STATE = 19      # Target position
 ACTIONS = 2          # 0: Left, 1: Right
 ALPHA = 0.1          # Learning rate
 GAMMA = 0.9          # Discount factor
 EPSILON = 0.2        # Exploration rate (higher to show learning curve)
-EPISODES = 500
+EPISODES = 40
 
 # Initialize Q-table
 q_table = np.zeros((STATES, ACTIONS))

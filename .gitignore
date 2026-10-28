@@ -1,7 +1,16 @@
 .git/
 .pytest_cache/
 .junk/
+.vscode/
 __pycache__/
 puf_narrow/
 puf_wide/
 tables4comparison/
+risks/
+debug/
+logs/
+*.csv
+*.png
+*.json
+*.svg
+*.swp

@@ -15,10 +15,12 @@ import hashlib
 import warnings
 warnings.filterwarnings('ignore')
 
+
 def _df_digest(df: pd.DataFrame) -> str:
     h = hashlib.sha1("|".join(map(str, df.columns)).encode())
     h.update(pd.util.hash_pandas_object(df, index=False).values.tobytes())
     return h.hexdigest()
+
 
 class UtilityEvaluator:
 
