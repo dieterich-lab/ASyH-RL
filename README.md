@@ -1,4 +1,4 @@
-# RL-ASyH
+# ASyH-RL
 
 The data synthesis tool based on principles of Q-learning for h-parameters optimization
 
@@ -13,16 +13,35 @@ Its main stages follow the order:
 generation -> evaluation -> adjustment of parameters . 
 
 At this moment there are 5 available models in the toolkit, although we plan to extend the list:
-0) CTGAN (conditional tabular generative adversarial network) 
-1) CopulaGAN (copula generative adversarial network)
-2) TVAE (tabular variance autoencoder)
-3) Gaussian Copula
-4) Gaussian Mixture 
+
+| ID | Model | Description |
+|---:|---|---|
+| 0 | CTGAN | Conditional tabular generative adversarial network |
+| 1 | CopulaGAN | Copula generative adversarial network |
+| 2 | TVAE | Tabular variational autoencoder |
+| 3 | Gaussian Copula | — |
+| 4 | Gaussian Mixture | — |
+
+
+## Required dependencies & libraries
+
+Necessary libraries are specified in the file `requirements.txt` . 
+To install needed dependencies run in cmd inside the right virtual environment: 
+`$ pip install -r requirements.txt`
+
+
+## How to use
+
+To launch the tool you can use the sbatch script `launch_sbatch_model.sh` - on HPC it submits a job to SLURM, 
+that runs an RL-optimization routine for a model, whose number is provided as an argument; 
+for example `$ sbatch launch_sbatch_model.sh 0` - it will start a process for CTGAN & RL agent, 
+depending on what model you need replace the digit with another one based on the table above in the overview section.
+
 
 ## Essential files and folders
 
 * `launch_sbatch_model.sh` - on HPC it submits a job to SLURM, that runs an RL-optimization routine for a model, whose number is 
-provided as an argument; for example 
+provided as an argument; for example
 `$ sbatch launch_sbatch_model.sh 0` - it will start a process for CTGAN & RL agent
 
 * `main_rl_optimization.py` - the main python script
@@ -36,7 +55,7 @@ provided as an argument; for example
 * `rl_optimizer.py` - the implementation of closed optimization loop
 
 
-## About ASyH
+## About ASyH (the original toolkit)
 
 A data protection tool that utilizes generative machine learning models to
 create synthetic datasets, safeguarding sensitive patient information. The ASyH
@@ -48,7 +67,7 @@ correlation while adding as much variation to the synthetic data, in order for
 it to have no resemblance to any of the original patient data entries.
 For synthesis, metrics and quality assurance we will mainly use the Synthetic Data Vault (github).
 
-More info can be found here - https://github.com/dieterich-lab/ASyH .
+More info can be found here - https://github.com/dieterich-lab/ASyH/blob/main/README.md.
 
 
 ## References

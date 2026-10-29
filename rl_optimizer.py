@@ -38,9 +38,6 @@ class RLOptimizer:
         self.val_df = self.val_data.data
 
         # REVIEW,  if it makes more sense to use sdv metadata instead of pandas api?
-        # self.discrete_columns = Data.detect_discrete_columns(self.train_df) if discrete_columns is None else discrete_columns
-        # self.date_columns = Data.detect_date_columns(self.train_df)
-        # self.continuous_cols = list(set(self.train_df.columns) - set(self.discrete_columns) - set(self.date_columns))
         col_types_dict = self.train_data.detect_column_types(self.train_df)
         self.discrete_columns = col_types_dict['categorical']
         self.continuous_cols = self.numerical_cols = col_types_dict['numerical']
@@ -73,9 +70,6 @@ class RLOptimizer:
         dict_meta_src = self.train_data.metadata.metadata.to_dict()
 
         # update primary keys
-        # dict_meta_transformed['primary_key'] = dict_meta_src.get('primary_key', None)
-        # dict_meta['primary_key'] = dict_meta_src.get('primary_key', None)
-        # assign 'row_id' as primary_key in the dict_meta
         dict_meta['primary_key'] = 'row_id'
 
         for k,v in dict_meta['columns'].items():
@@ -83,10 +77,6 @@ class RLOptimizer:
                 dict_meta['columns'][k].update(dict_meta_src['columns'][k])
 
             if 'pii' in dict_meta['columns'][k].keys():
-                # if k in dict_meta_src['columns'].keys() and 'pii' in dict_meta_src['columns'][k].keys():
-                    # if 'pii' in dict_meta_src['columns'][k].keys():
-                    # dict_meta['columns'][k]['pii'] = dict_meta_src['columns'][k]['pii']
-                # else:
                 del dict_meta['columns'][k]['pii']
                 # dict_meta['columns'][k]['sdtype']
 
@@ -111,20 +101,13 @@ class RLOptimizer:
             import json
             json.dump(dict_meta, f, indent=4)
 
-        # import ipdb; ipdb.set_trace()
-        # self.train_data_transformed.metadata.metadata = self.train_data_transformed.metadata.metadata.load_from_dict(dict_meta)
         STM = SingleTableMetadata()
         self.train_data.metadata.metadata = STM.load_from_dict(dict_meta)
         self.val_data.metadata.metadata = STM.load_from_dict(dict_meta)
 
-        # import ipdb; ipdb.set_trace()
-
         self.target_feature = target_feature
 
         self.modelParamSpace = modelParamSpace
-        
-        # self.action_size = len(self.n_components_options) * len(self.max_iter_options) * len(self.n_init_options)
-        # assert self.modelParamSpace is not None, "model_params cannot be None"
 
         if isinstance(self.modelParamSpace, dict):
             self.action_size = np.abs(np.prod([len(v) for v in self.modelParamSpace.values()]))
@@ -352,7 +335,6 @@ class RLOptimizer:
             print(f"  Action: {action}")
             params = self._action_to_params(action)
             print(f"  Params: {params}")
-
             print(f"  Generating synthetic data with params: {params} ...")
 
             syn = self._generate_synthetic_data(modelClass, params, n_samples=n_rows)

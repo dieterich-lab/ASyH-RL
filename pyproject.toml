@@ -1,0 +1,20 @@
+[project]
+name = "asyh-rl"
+version = "0.1.0"
+description = "The toolkit for med. data synthesis, enhanced with the RL-agent for automatic optimization"
+readme = "README.md"
+requires-python = "<=3.11.13,>3.10"
+dependencies = [
+    "asyh",
+    "ipdb>=0.13.13",
+    "python-magic>=0.4.27",
+    "standard-pkg-resources>=1.0.0",
+]
+
+[tool.uv.sources]
+asyh = { git = "https://github.com/dieterich-lab/ASyH.git", rev = "pre-release" }
+
+[dependency-groups]
+dev = [
+    "deptry>=0.25.1",
+]

@@ -61,7 +61,6 @@ def invoke_model(MODEL):
             cont_columns.append(col)
 
     discrete_columns = list([col for col in df.columns if col not in cont_columns])
-    # import ipdb; ipdb.set_trace()
 
     train_df = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
     val_df = pd.read_csv(val_data_path, sep=',', on_bad_lines='skip')
@@ -85,22 +84,6 @@ def invoke_model(MODEL):
     train_data = Data(train_df)
     val_data = Data(val_df)
 
-    # assign the column `Pat_ID.numeric` in metadata as a primary key
-    # train_data.metadata.metadata.primary_key = 'row_id'
-    # val_data.metadata.metadata.primary_key = 'row_id'
-    # # assing the sdtype of the column 'Pad_ID.numeric' as 'id'
-    # train_data.metadata.metadata.update_column(column_name='row_id',
-    #                                     sdtype='id') # pii=False)
-    # val_data.metadata.metadata.update_column(column_name='row_id',
-    #                                     sdtype='id') # pii=False)
-    
-    # # assign the sdtype of the column "ethnicity" as categorical
-    # train_data.metadata.metadata.update_column(column_name='ethnicity',
-    #                                   sdtype='categorical') # pii=False)
-    # val_data.metadata.metadata.update_column(column_name='ethnicity',
-    #                                       sdtype='categorical') # , pii=False)
-    # import ipdb; ipdb.set_trace()
-    
 
     # TODO: once the bug is resolved, switch parameter ranges back to original values
     modelParamSpace = {'default_distribution':['beta', 'norm', 'gamma'], 
@@ -110,17 +93,6 @@ def invoke_model(MODEL):
                        'n_components':[5, 10],
                        'n_init':[2, 5],
                        'max_iter':[50, 100]}
-
-    # define a small modelParamSpace with low number of epochs to make mock testing run faster
-    # modelParamSpace = {'default_distribution':['beta', 'norm'],
-    #                       'enforce_min_max_values':[True,False], 
-    #                       'epochs':[15, 30], 
-    #                       'verbose':[True],
-    #                       'n_components':[5, 10],
-    #                       'n_init':[1, 3],
-    #                       'max_iter':[2, 5]}
-
-    # import ipdb; ipdb.set_trace()
 
     if hasattr(MODEL(), '_sdv_model_class'):
         valid_param_names = MODEL()._sdv_model_class.__init__.__code__.co_varnames
@@ -189,12 +161,7 @@ def invoke_model(MODEL):
     diagnostic.to_csv(diagnostic_report_path, index=False)
 
 
-
-
 def main():
-    # MODELS = [GaussianMixtureModel, GaussianCopulaModel, # TVAEModel, 
-    # MODELS = [CTGANModel, CopulaGANModel, TVAEModel] # TODO: make GaussianMixture work properly!
-    # for model in MODELS:
     args = get_args()
     MODEL = MODELS_AVAIL[args.model_num]
     invoke_model(MODEL)
