@@ -9,9 +9,6 @@ base_dir = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(base_dir, '..')))
 # --------------------------------------------------
 from visualizer import Visualizer
-# from evaluator.utility_evaluator_2 import UtilityEvaluator
-# from rl_agent.q_learning_agent import QLearningAgent
-# from evaluator.fidelity_evaluator import FidelityEvaluator
 from rl_optimizer import RLOptimizer
 # import class data from the unit `data.py` located in the parent folder
 from data import Data
@@ -35,11 +32,6 @@ def main():
     val_data = Data(val_data)
 
     columns_to_drop = ['row_id']
-
-    # cols_drop = [col for col in columns_to_drop if col in train_data.data.columns and col in val_data.data.columns]
-    # # drop columns in place
-    # train_data.data.drop(columns=cols_drop, inplace=True)
-    # val_data.data.drop(columns=cols_drop, inplace=True)
 
     cont_columns = []
     for col in train_data.data.columns:
