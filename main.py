@@ -61,7 +61,7 @@ def invoke_model(MODEL):
             cont_columns.append(col)
 
     discrete_columns = list([col for col in df.columns if col not in cont_columns])
-
+    
     train_df = pd.read_csv(train_data_path, sep=',', on_bad_lines='skip')
     val_df = pd.read_csv(val_data_path, sep=',', on_bad_lines='skip')
     # import ipdb; ipdb.set_trace()

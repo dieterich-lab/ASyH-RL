@@ -51,7 +51,4 @@ class Pipeline(AbstractPipeline):
         return sum(scores.values()) / len(scores)
 
 
-    def optimize(self):
-
-
 AbstractPipeline.register(Pipeline)

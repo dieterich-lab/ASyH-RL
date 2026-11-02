@@ -72,6 +72,8 @@ class RLOptimizer:
         # update primary keys
         dict_meta['primary_key'] = 'row_id'
 
+        # import ipdb; ipdb.set_trace()
+
         for k,v in dict_meta['columns'].items():
             if k in dict_meta_src['columns'].keys():
                 dict_meta['columns'][k].update(dict_meta_src['columns'][k])

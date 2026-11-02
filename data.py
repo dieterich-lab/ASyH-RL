@@ -69,6 +69,10 @@ class Data:
         self._data = data
         # if metadata is None -> then use the method of SingleTableMetadata to detect if from data
         if metadata is None and data is not None:
+            print("Metadata is None, attempting to detect metadata from provided data.")
+            
+            # import ipdb; ipdb.set_trace()
+
             STM = SingleTableMetadata()
             # self._metadata = Metadata(metadata=STM.detect_from_dataframe(data))
             STM.detect_from_dataframe(data)
@@ -79,6 +83,7 @@ class Data:
             #     dict_stm['columns']['ethnicity']['sdtype'] = 'numerical'
             self._metadata = Metadata(metadata=dict_stm)
         else:
+            print("Metadata is provided, using the provided metadata.")
             self._metadata = metadata
 
         col_types_dict = self.detect_column_types(data) # , num_cols=num_cols, cat_cols=cat_cols, date_cols=date_cols)

@@ -9,4 +9,4 @@
 
 source /home/gsergei/asyh/bin/activate
 
-python3 main_rl_optimization.py --num-model "$@"
+python3 main.py --num-model "$@"

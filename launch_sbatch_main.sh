@@ -10,4 +10,4 @@
 
 source /home/gsergei/asyh/bin/activate
 
-python3 main_rl_optimization.py 
+python3 main.py 

@@ -25,4 +25,4 @@ trap cleanup EXIT
 ln -s "$PROJECT_DIR/puf_wide" "$WORKDIR/puf_wide"
 cd "$WORKDIR"
 
-python3 "$PROJECT_DIR/main_rl_optimization.py" --num-model "$@"
+python3 "$PROJECT_DIR/main.py" --num-model "$@"

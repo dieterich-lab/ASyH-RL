@@ -207,8 +207,23 @@ class FidelityEvaluator:
             # constant columns have undefined correlation (0/0 -> NaN); treat them as uncorrelated
             real_corr = self.real_data[self.continuous_columns].corr().fillna(0.0)
             syn_corr = self.synthetic_data[self.continuous_columns].corr().fillna(0.0)
-            np.fill_diagonal(real_corr.values, 1.0)
-            np.fill_diagonal(syn_corr.values, 1.0)
+
+            # It's not writable. MAKE it writable.
+            # real_corr.values.setflags(write=True)
+            # syn_corr.values.setflags(write=True)
+            # make real_corr and syn_corr values writable arrays
+            real_corr_values = real_corr.values.copy()
+            syn_corr_values = syn_corr.values.copy()
+            # make them writable
+            real_corr_values.setflags(write=True)
+            syn_corr_values.setflags(write=True)
+
+            np.fill_diagonal(real_corr_values, 1.0)
+            np.fill_diagonal(syn_corr_values, 1.0)
+
+            # rebuild real_corr and syn_corr dataframes
+            real_corr = pd.DataFrame(real_corr_values, index=real_corr.index, columns=real_corr.columns)
+            syn_corr = pd.DataFrame(syn_corr_values, index=syn_corr.index, columns=syn_corr.columns)
             
             # Frobenius distance
             frobenius_dist = np.linalg.norm(real_corr - syn_corr, 'fro')

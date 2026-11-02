@@ -44,7 +44,7 @@ depending on what model you need replace the digit with another one based on the
 provided as an argument; for example
 `$ sbatch launch_sbatch_model.sh 0` - it will start a process for CTGAN & RL agent
 
-* `main_rl_optimization.py` - the main python script
+* `main.py` - the main python script, it executes parameter optimization, model fitting and data synthesis
 
 * `rl_agent/` - the folder contains the module with the routines for RL agent
 
