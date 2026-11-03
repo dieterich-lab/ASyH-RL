@@ -18,9 +18,12 @@ from models import CTGANModel
 from data import Data
 
 
+THRESH_CONT_COL: int = 100
 SHARE_TRAIN: float = 0.8
 NUM_EPISODES: int = 50
-POSTFIX: str = 'pcs_score_2026-10-19-1830-long' # add a date here and short label to distinguish the experiment results
+# store the current timestamp inside the postfix of produced table name
+import datetime
+POSTFIX: str = datetime.datetime.now().strftime("%Y-%m-%d-%H%M")
 MODELS_AVAIL = [CTGANModel, CopulaGANModel, TVAEModel, GaussianCopulaModel, GaussianMixtureModel]
 
 
@@ -57,7 +60,7 @@ def invoke_model(MODEL):
     cont_columns = []
     for col in df.columns:
         is_numeric = pd.api.types.is_numeric_dtype(df[col])
-        if is_numeric or df[col].nunique() > 20:
+        if is_numeric or df[col].nunique() > THRESH_CONT_COL:
             cont_columns.append(col)
 
     discrete_columns = list([col for col in df.columns if col not in cont_columns])

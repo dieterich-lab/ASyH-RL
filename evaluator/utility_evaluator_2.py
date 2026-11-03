@@ -125,6 +125,9 @@ class UtilityEvaluator:
         X_train_syn = self.synthetic_data.drop(columns=[self.target_column])
         y_train_syn = self.synthetic_data[self.target_column]
 
+        # print(f"[UtilityEvaluator] Real train shape: {X_train_real.shape}, Real test shape: {X_test_real.shape}, Synthetic train shape: {X_train_syn.shape}")
+        # import ipdb; ipdb.set_trace()
+
         # order columns in X_test_real and X_train_syn in the same order as they're in X_train_real
         X_test_real = X_test_real[X_train_real.columns]
         X_train_syn = X_train_syn[X_train_real.columns]
@@ -232,6 +235,7 @@ class UtilityEvaluator:
                 print(f"[UtilityEvaluator] Could not compute AUC ({e}); falling back to 0.0.")
                 metrics['auc'] = 0.0
         else:
+            print(f"[UtilityEvaluator] Model {type(model).__name__} does not support predict_proba; AUC set to 0.0.")
             metrics['auc'] = 0.0
         return metrics
     

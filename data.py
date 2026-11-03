@@ -317,6 +317,8 @@ class Data:
         cat_cols = list(fitted_cols["cat"])
         num_cols = list(fitted_cols["num"])
 
+        # import ipdb; ipdb.set_trace() # TODO: delete this line later
+
         cat_feature_count = len(cat_cols)
         num_feature_count = len(num_cols)
         date_feature_count = len(self.date_cols)
@@ -325,12 +327,19 @@ class Data:
         assert len(column_names) == cat_feature_count + num_feature_count + date_feature_count, \
             f"Sum of feature counts ({cat_feature_count + num_feature_count + date_feature_count}) does not match number of columns ({len(column_names)})."
         
+        # build mapping of column names to their indices to reduce the complexity from O(n*m) down to O(n)
+        col_mapping = {col: idx for idx, col in enumerate(column_names)}
+        
         # get indices of numerical features
-        num_indices = [column_names.index(col) for col in num_cols]
+        # num_indices = [column_names.index(col) for col in num_cols] 
+        # like above but using col_mapping instead of index()
+        num_indices = [col_mapping[col] for col in num_cols]
         # get indices of categorical features
-        cat_indices = [column_names.index(col) for col in cat_cols]
+        # cat_indices = [column_names.index(col) for col in cat_cols]
+        cat_indices = [col_mapping[col] for col in cat_cols]
         # get indices of date columns
-        date_indices = [column_names.index(col) for col in self.date_cols]
+        # date_indices = [column_names.index(col) for col in self.date_cols]
+        date_indices = [col_mapping[col] for col in self.date_cols]
 
         X = np.asarray(df_proc)
         if X.ndim == 1:
@@ -342,6 +351,7 @@ class Data:
 
         # SimpleImputer has no inverse with add_indicator=False, so only invert the encoder
         ordinal = cat_transformer.named_steps["ordinal"]
+
         # Generative models can emit non-integer or out-of-range codes; snap them to valid category indices
         max_codes = np.array([len(c) - 1 for c in ordinal.categories_])
         cat_codes = np.rint(np.nan_to_num(cat_block.astype(float)))

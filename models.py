@@ -104,10 +104,20 @@ class TVAEModel(Model):
         data_size = len(data.data.columns)
         dim = 2*data_size
         hidden_layer_dims = (dim, dim)
-        return {'metadata': get_metadata_from_data(data),
+        adapted_args_dict = {'metadata': get_metadata_from_data(data),
                 'compress_dims': hidden_layer_dims,
                 'decompress_dims': hidden_layer_dims,
                 'embedding_dim': dim}
+        # adding to the dict the following 
+        # embedding_dim=256,
+        # compress_dims=(256, 256),
+        # decompress_dims=(256, 256),
+        adapted_args_dict.update({
+            'embedding_dim': 256,
+            'compress_dims': (256, 256),
+            'decompress_dims': (256, 256)
+        })
+        return adapted_args_dict
 
 
 class CTGANModel(Model):

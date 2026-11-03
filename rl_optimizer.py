@@ -147,13 +147,13 @@ class RLOptimizer:
     def _generate_synthetic_data(self, modelClass: type, params: Dict, n_samples: int = 100) -> pd.DataFrame:
 
         def enforce_ordinal_valid_range(N: int, max_N: int):
-                """ Helper function that replaces ordinal integer with valid value if it is too big """
-                if N >= max_N:
-                    return N % max_N
-                else:
-                    return N
+            """ Helper function that replaces ordinal integer with valid value if it is too big """
+            if N >= max_N:
+                return N % max_N
+            else:
+                return N
 
-        n_samples = n_samples if n_samples else len(self.df_train_model)
+        n_samples = n_samples if n_samples else len(self.train_df)
 
         if hasattr(modelClass, '__init__'):
             listModelClassArgs = list(inspect.signature(modelClass.__init__).parameters)
@@ -167,22 +167,34 @@ class RLOptimizer:
 
         # self.train_data_transformed.metadata.metadata.primary_key = ''
 
-        print("** Inside the method `_generate_synthetic_data **`")
+        # print("** Inside the method `_generate_synthetic_data **`")
 
         # import ipdb; ipdb.set_trace()
 
-        # convert all object dtypes to float in the `self.train_data.data`
+        # convert  continuous columns to float in the `self.train_data.data`
+        # train_data_cont = self._coerce_continuous_numeric(self.train_data.data[self.continuous_cols], all_columns=False)
+        # train_data_rest = self.train_data.data.drop(columns=self.continuous_cols, errors='ignore')
+        # self.train_data.data = pd.concat([train_data_cont, train_data_rest], axis=1)
+        
+        # convert all columns to float in train_data.data
         self.train_data.data = self._coerce_continuous_numeric(self.train_data.data, all_columns=True)
 
-        # import ipdb; ipdb.set_trace()
+        # right after `self.train_data.data = self._coerce_continuous_numeric(...)`
+        # print(self.train_data.data['pcss'].nunique(), self.train_data.data['pcss'].isna().sum())
 
         # subsample train_data down to `n_samples` and save in the var. sub_train_data
         sub_train_data: pd.DataFrame = self._stratified_subsample(self.train_data.data, n_rows=n_samples)
         sub_train_data: Data = Data(sub_train_data, metadata=self.train_data.metadata)
 
+        # right after `sub_train_data: Data = Data(...)`
+        # print(sub_train_data.data['pcss'].value_counts(dropna=False).head())
+
         # model.fit(self.train_data)
         model.fit(sub_train_data)
         model_output = model.sample(n_samples)
+
+        # right after `model_output = model.sample(n_samples)`
+        # print(type(model).__name__, model_output['pcss'].nunique() if hasattr(model_output, 'columns') else None)
 
         if isinstance(model_output, list):
             samples = np.array(model_output[0])
@@ -192,11 +204,38 @@ class RLOptimizer:
         preprocessor = self.train_data.preprocessor
 
         # Convert array samples back into a DataFrame matching transformed column names
-        full_feature_names = list(preprocessor.get_feature_names_out())
-        df_samples = pd.DataFrame(samples, columns=[name.split("__")[-1] for name in full_feature_names])
+        # full_feature_names = list(preprocessor.get_feature_names_out())
+
+        assert samples.shape[1] == len(preprocessor.get_feature_names_out()), "Mismatch between number of generated samples and expected feature names."
+
+        # import ipdb; ipdb.set_trace()
+
+        # Column names come from the fitted transformers' own column lists (output order: num | cat | remainder), not from string-splitting
+        feature_names = []
+        for name, _, cols in preprocessor.transformers_:
+            if name == "remainder":
+                cols = preprocessor.feature_names_in_[cols]  # remainder stores integer positions
+            feature_names.extend(cols)
+
+        assert feature_names == [n.split("__", 1)[-1] for n in preprocessor.get_feature_names_out()], "Column order mismatch with preprocessor output."
+
+        if isinstance(model_output, pd.DataFrame):
+            # the model's own column order may differ from the preprocessor's, so select by name
+            df_samples = model_output[feature_names].reset_index(drop=True)
+        else:
+            df_samples = pd.DataFrame(samples, columns=feature_names)
+
+        print("[Data] Inverse transforming data...")
+        print("###### Inverse transforming categorical block ###")
+        print(df_samples['pcss'].describe(), df_samples['pcss'].isna().sum())
+        print(df_samples['pcss'].round().value_counts().head(20))
+        print('pcss' in self.train_data.num_cols, 'pcss' in self.train_data.cat_cols)
+        ordinal = self.train_data.preprocessor.named_transformers_['cat'].named_steps['ordinal']
+        # print({c: len(k) for c, k in zip(self.train_data.cat_cols, ordinal.categories_)})
 
         # Inverse transform using the class method of Data - `inverse_transform_data`
         df_syn = self.train_data.inverse_transform_data(df_samples)
+        # print(df_syn['pcss'].nunique())
 
         return df_syn[self.train_df.columns]
 
@@ -286,6 +325,8 @@ class RLOptimizer:
             # transform data
             sub_synthetic_data_transformed = sub_synthetic_data_.preprocess_data(
                 inplace=False, subsample=False, reuse_preprocessor=self.train_data.preprocessor)
+
+            # import ipdb; ipdb.set_trace() # TODO: delete this line later
 
             # fid = FidelityEvaluator(self.train_df, synthetic_data, self.discrete_columns)
             fid = FidelityEvaluator(sub_val_data, sub_synthetic_data_transformed, 
