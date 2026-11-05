@@ -143,11 +143,11 @@ def invoke_model(MODEL):
     # evaluate quality with sdv built-in methods
     from sdv.evaluation.single_table import evaluate_quality
 
-    quality_report = evaluate_quality(train_data, synth_data, metadata=train_data.metadata)
+    # quality_report = evaluate_quality(train_data, synth_data, metadata=train_data.metadata.metadata)
 
     # save it on disk
-    quality_report_path = f'quality_report_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{POSTFIX}.csv'
-    quality_report.to_csv(quality_report_path, index=False)
+    # quality_report_path = f'quality_report_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{POSTFIX}.csv'
+    # quality_report.to_csv(quality_report_path, index=False)
 
     # evaluate data fidelity with sdv built-in methods
 

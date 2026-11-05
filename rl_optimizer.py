@@ -11,6 +11,7 @@ from data import Data
 base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, base_dir)
 from evaluator.utility_evaluator_2 import UtilityEvaluator
+from evaluator.anonymity_evaluator_3 import PrivacyEvaluator
 from rl_agent.q_learning_agent import QLearningAgent
 from evaluator.fidelity_evaluator import FidelityEvaluator
 # import SingleTableMetadata
@@ -324,7 +325,29 @@ class RLOptimizer:
 
             # transform data
             sub_synthetic_data_transformed = sub_synthetic_data_.preprocess_data(
-                inplace=False, subsample=False, reuse_preprocessor=self.train_data.preprocessor)
+                inplace=False, subsample=False, reuse_preprocessor=self.train_data.preprocessor
+                )
+
+            # get column dtypes of columns in sub_train_data
+            ctypes_train = sub_train_data.dtypes.to_dict()
+            # convert column dtypes in sub_synthetic_data_transformed so they match `ctypes_train`
+            for col, dtype in ctypes_train.items():
+                if col in sub_synthetic_data_transformed.columns:
+                    try:
+                        sub_synthetic_data_transformed[col] = sub_synthetic_data_transformed[col].astype(dtype)
+                    except Exception as e:
+                        warnings.warn(f"Could not convert column '{col}' to dtype '{dtype}': {e}")
+
+            # assess privacy risk with anonymeter
+            priv_assessor = PrivacyEvaluator(
+                real_train=sub_train_data,
+                real_test=sub_val_data,
+                synthetic_data=sub_synthetic_data_transformed,
+                # discrete_columns=self.discrete_columns,
+                aux_cols=None
+            )
+
+            priv = priv_assessor.get_detailed_report()
 
             # import ipdb; ipdb.set_trace() # TODO: delete this line later
 
@@ -361,7 +384,8 @@ class RLOptimizer:
                 'utility_score': float(util_rep.get('utility_score', 0.0)),
                 # 'utility_score': min(float(util_rep.get('utility_score', 0.0)), 1.0),
                 'ks_score': 1.0 - fid_rep['univariate_distributions']['overall_ks_score'],
-                'js_score': 1.0 - fid_rep['univariate_distributions']['overall_js_score']
+                'js_score': 1.0 - fid_rep['univariate_distributions']['overall_js_score'],
+                'privacy_risk_score': 1.0 - priv['average_privacy_risk']
             }
     
 
@@ -397,7 +421,8 @@ class RLOptimizer:
             print(f"  Evaluation Results: {res}")
 
             self.last_eval = res
-            reward = 0.3 * np.nanmean([res['tvd_score'], res['ks_score'], res['js_score']]) + 0.7 * res['utility_score'] # TODO: test this formula and change later if needed
+            # reward = 0.3 * np.nanmean([res['tvd_score'], res['ks_score'], res['js_score']]) + 0.7 * res['utility_score']
+            reward = 0.33 * (np.nanmean([res['tvd_score'], res['ks_score'], res['js_score']]) + res['utility_score'] + res['privacy_risk_score'])  # TODO: test this formula and change later if needed
             print(f"  Reward: {reward:.4f}") 
             self.optimization_history['rewards'].append(reward)
             
