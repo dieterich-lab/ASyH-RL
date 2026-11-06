@@ -275,7 +275,8 @@ class Visualizer:
         print(f"The plot is save on the path: {self.save_dir}/{plot_name}")
 
     def plot_comprehensive_scores_on_ax(self, evaluation_result: Dict, ax=None,
-                                        label: str = 'Scores', color: str = None):
+                                        label: str = 'Scores', color: str = None,
+                                        num_scores: int = 5):
         """
         Same radar chart as plot_comprehensive_scores, but drawn on a given
         polar Axes instead of creating/saving its own figure, so several
@@ -293,15 +294,30 @@ class Visualizer:
         scores = evaluation_result['scores']
         fidelity_details = evaluation_result['fidelity_details']
 
-        categories = ['Fidelity\n(Overall)', 'Utility\n(TSTR)',
-                     'KS Score', 'JS Score', 'Correlation']
-        values = [
-            scores['fidelity_score'],
-            scores['utility_score'],
-            1.0 - fidelity_details['univariate_distributions']['overall_ks_score'],
-            1.0 - fidelity_details['univariate_distributions']['overall_js_score'],
-            fidelity_details['correlation_similarity']['correlation_correlation']
-        ]
+        match num_scores:
+            case 5:
+                categories = ['Fidelity\n(Overall)', 'Utility\n(TSTR)',
+                            'KS Score', 'JS Score', 'Correlation']
+                values = [
+                    scores['fidelity_score'],
+                    scores['utility_score'],
+                    1.0 - fidelity_details['univariate_distributions']['overall_ks_score'],
+                    1.0 - fidelity_details['univariate_distributions']['overall_js_score'],
+                    fidelity_details['correlation_similarity']['correlation_correlation']
+                ]
+            case 6:
+                categories = ['Fidelity\n(Overall)', 'Utility\n(TSTR)',
+                              'KS Score', 'JS Score', 'Correlation', 'Privacy score']
+                values = [
+                    scores['fidelity_score'],
+                    scores['utility_score'],
+                    1.0 - fidelity_details['univariate_distributions']['overall_ks_score'],
+                    1.0 - fidelity_details['univariate_distributions']['overall_js_score'],
+                    fidelity_details['correlation_similarity']['correlation_correlation'],
+                    evaluation_result['privacy_risk_score']
+                ]
+            case _:
+                raise ValueError(f"Unsupported number of scores: {num_scores}. Must be 5 or 6.")
 
         angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
         values += values[:1]
@@ -321,9 +337,11 @@ class Visualizer:
         ax.grid(True, alpha=0.3)
 
         return ax
+    
 
     def plot_comprehensive_scores_overlay(self, evaluation_results: Dict[str, Dict],
-                                          plot_name: str = 'comprehensive_scores_overlay.png'):
+                                          plot_name: str = 'comprehensive_scores_overlay.png',
+                                          num_scores: int = 5):
         """
         Overlays several plot_comprehensive_scores_on_ax radar charts on one
         shared polar Axes, e.g. to compare scores across models/runs.
@@ -332,10 +350,13 @@ class Visualizer:
             evaluation_results: mapping of series label -> evaluation_result dict
             plot_name: output file name
         """
+
+        assert num_scores in [5, 6], "num_scores must be either 5 or 6"
+
         fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
 
         for label, evaluation_result in evaluation_results.items():
-            self.plot_comprehensive_scores_on_ax(evaluation_result, ax=ax, label=label)
+            self.plot_comprehensive_scores_on_ax(evaluation_result, ax=ax, label=label, num_scores=num_scores)
 
         ax.set_title('Comprehensive Evaluation Scores\n(Closer to edge = Better)',
                     fontsize=14, fontweight='bold', pad=20)

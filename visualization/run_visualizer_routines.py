@@ -19,10 +19,11 @@ def main():
     val_path = 'puf_wide/val.csv'
 
     syn_paths_names = {
-        'GMM-RL':'./synthetic_data_GaussianMixtureModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv',
-        'Gaussian Copula':'./synthetic_data_GaussianCopulaModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv',
-        'TVAE':'./synthetic_data_TVAEModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv',
-        'CTGAN':'./synthetic_data_CTGANModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv'
+        # 'GMM-RL':'./synthetic_data_GaussianMixtureModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv',
+        # 'Gaussian Copula':'./synthetic_data_GaussianCopulaModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv',
+        # 'TVAE':'./synthetic_data_TVAEModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv',
+        # 'CTGAN':'./synthetic_data_CTGANModel_wide_rl_50ep_pcs_score_2026-10-19-1830-long.csv'
+        'CTGAN':'./synthetic_data_CTGANModel_wide_rl_50ep_2026-11-05-1440.csv'
         }
 
     train_data = pd.read_csv(train_path)
@@ -86,7 +87,7 @@ def main():
     visualizer = Visualizer()
 
     # visualizer.plot_comprehensive_scores(eval_result, plot_name='comprehensive_score_gmm_rl_wide_40ep.png')
-    visualizer.plot_comprehensive_scores_overlay(eval_results, plot_name='comprehensive_score_overlay_rl_wide_40ep_2026-10-24.png')
+    visualizer.plot_comprehensive_scores_overlay(eval_results, plot_name='comprehensive_score_rl_wide_50ep_2026-11-06.png')
 
 
 if __name__ == '__main__':
