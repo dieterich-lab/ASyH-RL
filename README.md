@@ -38,7 +38,9 @@ for example `$ sbatch launch_sbatch_model.sh 0` - it will start a process for CT
 depending on what model you need replace the digit with another one based on the table above in the overview section.
 
 
-## Essential files and folders
+## Essential executable files and folders
+
+* `app.py` - the launcher that opens a simple ascii-based gui, it functions in a linux/unix terminal window
 
 * `launch_sbatch_model.sh` - on HPC it submits a job to SLURM, that runs an RL-optimization routine for a model, whose number is 
 provided as an argument; for example

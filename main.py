@@ -25,6 +25,15 @@ NUM_EPISODES: int = 50
 import datetime
 POSTFIX: str = datetime.datetime.now().strftime("%Y-%m-%d-%H%M")
 MODELS_AVAIL = [CTGANModel, CopulaGANModel, TVAEModel, GaussianCopulaModel, GaussianMixtureModel]
+TRAIN_DATA_PATH: str = 'puf_wide/train.csv'
+VAL_DATA_PATH: str = 'puf_wide/val.csv'
+DEFAULT_PARAM_SPACE = {'default_distribution':['beta', 'norm', 'gamma'], 
+                       'enforce_min_max_values':[True,False], 
+                       'epochs':[25, 50, 100], 
+                       'verbose':[True],
+                       'n_components':[5, 10],
+                       'n_init':[2, 5],
+                       'max_iter':[50, 100]}
 
 
 # the function for parsing command-line arguments
@@ -38,15 +47,15 @@ def get_args():
     return parser.parse_args()
 
 
-def invoke_model(MODEL):
+def invoke_model(MODEL, train_data_path=None, val_data_path=None, output_csv=None, param_space=None):
     # MODEL = TVAEModel # CopulaGANModel # GaussianCopulaModel
     print("=" * 80)
     print(f"{MODEL.__qualname__} Hyperparameter Optimization (RL-driven with Val Set)")
     print("=" * 80)
     
     # 1. Provide valid paths
-    train_data_path = 'puf_wide/train.csv' # 80%
-    val_data_path = 'puf_wide/val.csv'     # 10%
+    train_data_path = train_data_path or TRAIN_DATA_PATH # 80%
+    val_data_path = val_data_path or VAL_DATA_PATH       # 10%
     
     if not os.path.exists(train_data_path) or not os.path.exists(val_data_path):
         print("Invalid path to - train.csv or val！")
@@ -89,13 +98,7 @@ def invoke_model(MODEL):
 
 
     # TODO: once the bug is resolved, switch parameter ranges back to original values
-    modelParamSpace = {'default_distribution':['beta', 'norm', 'gamma'], 
-                       'enforce_min_max_values':[True,False], 
-                       'epochs':[25, 50, 100], 
-                       'verbose':[True],
-                       'n_components':[5, 10],
-                       'n_init':[2, 5],
-                       'max_iter':[50, 100]}
+    modelParamSpace = dict(param_space if param_space is not None else DEFAULT_PARAM_SPACE)
 
     if hasattr(MODEL(), '_sdv_model_class'):
         valid_param_names = MODEL()._sdv_model_class.__init__.__code__.co_varnames
@@ -132,7 +135,7 @@ def invoke_model(MODEL):
     best_params = optimizer.get_best_params()
     print(f"\n Best parameters: {best_params}")
     
-    output_csv = f'synthetic_data_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{POSTFIX}.csv'
+    output_csv = output_csv or f'synthetic_data_{MODEL.__qualname__}_wide_rl_{NUM_EPISODES}ep_{POSTFIX}.csv'
     optimizer.generate_with_best_params(output_csv, n_samples=num_rows_all)
     print(f"✓ The synthesis has been completed: {output_csv}")
 
